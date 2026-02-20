@@ -1,0 +1,99 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <!-- Rose Gold Gradient -->
+    <linearGradient id="roseGold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#E94560"/>
+      <stop offset="100%" style="stop-color:#FF6B6B"/>
+    </linearGradient>
+    <!-- Navy Gradient -->
+    <linearGradient id="navyGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1A1A2E"/>
+      <stop offset="50%" style="stop-color:#16213E"/>
+      <stop offset="100%" style="stop-color:#0F3460"/>
+    </linearGradient>
+    <!-- Gold Gradient -->
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#D4A574"/>
+      <stop offset="100%" style="stop-color:#E8C49A"/>
+    </linearGradient>
+    <!-- Subtle glow -->
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <!-- App icon rounded rect clip -->
+    <clipPath id="iconClip">
+      <rect x="0" y="0" width="512" height="512" rx="112" ry="112"/>
+    </clipPath>
+  </defs>
+
+  <!-- Background with rounded corners (app icon shape) -->
+  <rect x="0" y="0" width="512" height="512" rx="112" ry="112" fill="url(#navyGrad)"/>
+
+  <!-- Subtle radial overlay for depth -->
+  <radialGradient id="depthOverlay" cx="35%" cy="30%" r="70%">
+    <stop offset="0%" style="stop-color:#0F3460; stop-opacity:0.3"/>
+    <stop offset="100%" style="stop-color:#1A1A2E; stop-opacity:0"/>
+  </radialGradient>
+  <rect x="0" y="0" width="512" height="512" rx="112" ry="112" fill="url(#depthOverlay)"/>
+
+  <!-- Camera/viewfinder frame (stylized) -->
+  <!-- Top-left corner -->
+  <path d="M 120 175 L 120 145 Q 120 125 140 125 L 170 125"
+        stroke="url(#goldGrad)" stroke-width="6" fill="none" stroke-linecap="round"/>
+  <!-- Top-right corner -->
+  <path d="M 342 125 L 372 125 Q 392 125 392 145 L 392 175"
+        stroke="url(#goldGrad)" stroke-width="6" fill="none" stroke-linecap="round"/>
+  <!-- Bottom-left corner -->
+  <path d="M 120 305 L 120 335 Q 120 355 140 355 L 170 355"
+        stroke="url(#goldGrad)" stroke-width="6" fill="none" stroke-linecap="round"/>
+  <!-- Bottom-right corner -->
+  <path d="M 342 355 L 372 355 Q 392 355 392 335 L 392 305"
+        stroke="url(#goldGrad)" stroke-width="6" fill="none" stroke-linecap="round"/>
+
+  <!-- Central fashion hanger icon merged with AI sparkle -->
+  <g transform="translate(256, 225)" filter="url(#glow)">
+    <!-- Hanger hook -->
+    <path d="M 0 -65 Q 0 -90 20 -90 Q 40 -90 40 -70 Q 40 -55 25 -50"
+          stroke="url(#roseGold)" stroke-width="8" fill="none" stroke-linecap="round"/>
+    <!-- Hanger body -->
+    <path d="M 0 -65 L -75 0 L 75 0 Z"
+          stroke="url(#roseGold)" stroke-width="7" fill="none" stroke-linejoin="round" stroke-linecap="round"/>
+  </g>
+
+  <!-- AI Sparkle elements -->
+  <!-- Main sparkle (4-point star) top-right -->
+  <g transform="translate(355, 148)">
+    <path d="M 0 -18 Q 3 -3 18 0 Q 3 3 0 18 Q -3 3 -18 0 Q -3 -3 0 -18 Z"
+          fill="url(#roseGold)" opacity="0.95"/>
+  </g>
+  <!-- Small sparkle -->
+  <g transform="translate(380, 118)">
+    <path d="M 0 -9 Q 1.5 -1.5 9 0 Q 1.5 1.5 0 9 Q -1.5 1.5 -9 0 Q -1.5 -1.5 0 -9 Z"
+          fill="#FF6B6B" opacity="0.7"/>
+  </g>
+  <!-- Tiny sparkle -->
+  <g transform="translate(340, 112)">
+    <path d="M 0 -6 Q 1 -1 6 0 Q 1 1 0 6 Q -1 1 -6 0 Q -1 -1 0 -6 Z"
+          fill="#D4A574" opacity="0.6"/>
+  </g>
+
+  <!-- "SnapStyle" text -->
+  <text x="256" y="415" text-anchor="middle"
+        font-family="'SF Pro Display', 'Helvetica Neue', Arial, sans-serif"
+        font-weight="700" font-size="52" letter-spacing="3" fill="white">
+    <tspan fill="white">Snap</tspan><tspan fill="url(#roseGold)">Style</tspan>
+  </text>
+
+  <!-- "AI" badge -->
+  <rect x="220" y="430" width="72" height="28" rx="14" fill="url(#roseGold)" opacity="0.15"/>
+  <rect x="220" y="430" width="72" height="28" rx="14" stroke="url(#roseGold)" stroke-width="1.5" fill="none" opacity="0.4"/>
+  <text x="256" y="451" text-anchor="middle"
+        font-family="'SF Pro Display', 'Helvetica Neue', Arial, sans-serif"
+        font-weight="600" font-size="16" letter-spacing="4" fill="url(#roseGold)">
+    AI
+  </text>
+</svg>

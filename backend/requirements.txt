@@ -1,0 +1,47 @@
+# FastAPI and server
+fastapi>=0.109.2
+uvicorn[standard]>=0.27.1
+python-multipart>=0.0.9
+gunicorn>=21.2.0
+
+# Database
+sqlalchemy>=2.0.27
+alembic>=1.13.1
+psycopg2-binary>=2.9.9
+
+# Authentication & Security
+python-jose[cryptography]>=3.3.0
+passlib[bcrypt]>=1.7.4
+bcrypt>=4.1.2
+python-dotenv>=1.0.1
+pydantic[email]>=2.7.0
+pydantic-settings>=2.2.1
+
+# Google Gemini AI
+google-generativeai>=0.7.2
+
+# HTTP requests
+httpx>=0.27.0
+aiofiles>=23.2.1
+
+# Image processing
+pillow>=10.2.0
+
+# Date handling
+pytz>=2024.1
+
+# Cryptography (updated for security patches)
+cryptography>=42.0.5
+
+# AWS S3 for image storage (optional)
+boto3>=1.34.56
+
+# Stripe payments
+stripe>=8.4.0
+
+# Rate limiting
+slowapi>=0.1.9
+
+# Security scanning (dev dependency)
+# safety>=3.0.0
+# bandit>=1.7.7

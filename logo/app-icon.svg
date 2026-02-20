@@ -1,0 +1,96 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <!-- Rose Gold Gradient -->
+    <linearGradient id="roseGold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#E94560"/>
+      <stop offset="100%" style="stop-color:#FF6B6B"/>
+    </linearGradient>
+    <!-- Navy Gradient -->
+    <linearGradient id="navyGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1A1A2E"/>
+      <stop offset="40%" style="stop-color:#16213E"/>
+      <stop offset="100%" style="stop-color:#0F3460"/>
+    </linearGradient>
+    <!-- Gold Gradient -->
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#D4A574"/>
+      <stop offset="100%" style="stop-color:#E8C49A"/>
+    </linearGradient>
+    <!-- Soft glow filter -->
+    <filter id="softGlow">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="innerGlow">
+      <feGaussianBlur stdDeviation="20" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1024" height="1024" rx="224" ry="224" fill="url(#navyGrad)"/>
+
+  <!-- Subtle radial highlight for depth -->
+  <radialGradient id="highlight" cx="38%" cy="32%" r="65%">
+    <stop offset="0%" style="stop-color:#0F3460; stop-opacity:0.4"/>
+    <stop offset="100%" style="stop-color:#1A1A2E; stop-opacity:0"/>
+  </radialGradient>
+  <rect width="1024" height="1024" rx="224" ry="224" fill="url(#highlight)"/>
+
+  <!-- Viewfinder corners (camera/scan aesthetic) -->
+  <g stroke="url(#goldGrad)" stroke-width="10" fill="none" stroke-linecap="round">
+    <!-- Top-left -->
+    <path d="M 220 340 L 220 280 Q 220 240 260 240 L 320 240"/>
+    <!-- Top-right -->
+    <path d="M 704 240 L 764 240 Q 804 240 804 280 L 804 340"/>
+    <!-- Bottom-left -->
+    <path d="M 220 620 L 220 680 Q 220 720 260 720 L 320 720"/>
+    <!-- Bottom-right -->
+    <path d="M 704 720 L 764 720 Q 804 720 804 680 L 804 620"/>
+  </g>
+
+  <!-- Fashion hanger icon -->
+  <g transform="translate(512, 460)" filter="url(#softGlow)">
+    <!-- Hook -->
+    <path d="M 0 -150 Q 0 -195 45 -195 Q 90 -195 90 -155 Q 90 -125 55 -115"
+          stroke="url(#roseGold)" stroke-width="16" fill="none" stroke-linecap="round"/>
+    <!-- Hanger arms -->
+    <path d="M 0 -150 L -160 -10 L 160 -10 Z"
+          stroke="url(#roseGold)" stroke-width="14" fill="none" stroke-linejoin="round" stroke-linecap="round"/>
+  </g>
+
+  <!-- AI Sparkles cluster -->
+  <!-- Large 4-point star -->
+  <g transform="translate(720, 280)" filter="url(#softGlow)">
+    <path d="M 0 -40 Q 6 -6 40 0 Q 6 6 0 40 Q -6 6 -40 0 Q -6 -6 0 -40 Z"
+          fill="url(#roseGold)"/>
+  </g>
+  <!-- Medium sparkle -->
+  <g transform="translate(770, 220)">
+    <path d="M 0 -20 Q 3 -3 20 0 Q 3 3 0 20 Q -3 3 -20 0 Q -3 -3 0 -20 Z"
+          fill="#FF6B6B" opacity="0.75"/>
+  </g>
+  <!-- Small sparkle -->
+  <g transform="translate(690, 215)">
+    <path d="M 0 -12 Q 2 -2 12 0 Q 2 2 0 12 Q -2 2 -12 0 Q -2 -2 0 -12 Z"
+          fill="#D4A574" opacity="0.65"/>
+  </g>
+  <!-- Tiny sparkle -->
+  <g transform="translate(755, 268)">
+    <path d="M 0 -8 Q 1.5 -1.5 8 0 Q 1.5 1.5 0 8 Q -1.5 1.5 -8 0 Q -1.5 -1.5 0 -8 Z"
+          fill="white" opacity="0.4"/>
+  </g>
+
+  <!-- "S" lettermark at bottom -->
+  <text x="512" y="870" text-anchor="middle"
+        font-family="'SF Pro Display', 'Helvetica Neue', Arial, sans-serif"
+        font-weight="800" font-size="100" fill="white" opacity="0.12" letter-spacing="8">
+    SNAPSTYLE
+  </text>
+</svg>
