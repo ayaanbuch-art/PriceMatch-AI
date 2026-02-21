@@ -1,0 +1,2 @@
+# Root requirements file - installs backend dependencies
+-r backend/requirements.txt
