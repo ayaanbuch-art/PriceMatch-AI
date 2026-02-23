@@ -97,6 +97,16 @@ class SecureErrorHandlerMiddleware(BaseHTTPMiddleware):
             # In development, log to file for debugging
             if settings.DEBUG:
                 logger.debug(f"Full traceback for {error_id}:\n{traceback.format_exc()}")
+                # Show actual error in debug mode
+                return JSONResponse(
+                    status_code=500,
+                    content={
+                        "detail": str(exc),
+                        "error_type": type(exc).__name__,
+                        "error_id": error_id,
+                        "traceback": traceback.format_exc()
+                    }
+                )
 
             # Return sanitized error to client - NEVER expose internals
             return JSONResponse(
