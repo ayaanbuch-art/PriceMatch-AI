@@ -25,8 +25,8 @@ Base.metadata.create_all(bind=engine)
 
 # Initialize FastAPI app with production settings
 app = FastAPI(
-    title="SnapStyle AI API",
-    description="Backend API for SnapStyle AI fashion discovery app",
+    title="PriceMatch AI API",
+    description="Backend API for PriceMatch AI fashion discovery app",
     version="1.0.0",
     # Disable docs in production for security
     docs_url="/docs" if settings.DEBUG else None,
