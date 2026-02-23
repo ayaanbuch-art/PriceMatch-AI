@@ -20,18 +20,23 @@ logger = logging.getLogger(__name__)
 pwd_context = CryptContext(
     schemes=["bcrypt"],
     deprecated="auto",
-    bcrypt__default_rounds=12,
-    bcrypt__truncate_error=False
+    bcrypt__default_rounds=12
 )
 
 # HTTP Bearer token authentication
 security = HTTPBearer()
 
 
+def _truncate_password(password: str) -> bytes:
+    """Truncate password to 72 bytes (bcrypt limit)."""
+    return password.encode('utf-8')[:72]
+
+
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a password against its hash using constant-time comparison."""
     try:
-        return pwd_context.verify(plain_password, hashed_password)
+        truncated = _truncate_password(plain_password)
+        return pwd_context.verify(truncated, hashed_password)
     except Exception:
         # Log internally but don't expose error details
         logger.warning("Password verification error")
@@ -39,8 +44,9 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 
 def get_password_hash(password: str) -> str:
-    """Hash a password using bcrypt."""
-    return pwd_context.hash(password)
+    """Hash a password using bcrypt (truncated to 72 bytes)."""
+    truncated = _truncate_password(password)
+    return pwd_context.hash(truncated)
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
