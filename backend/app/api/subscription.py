@@ -37,6 +37,12 @@ class CheckoutRequest(BaseModel):
     tier: str  # 'basic', 'pro', 'unlimited'
 
 
+class AdminGrantRequest(BaseModel):
+    """Request for admin to grant unlimited access."""
+    email: str
+    admin_secret: str
+
+
 @router.get("/status", response_model=SubscriptionStatus)
 async def get_subscription_status(
     current_user: User = Depends(get_current_user)
@@ -476,6 +482,64 @@ async def handle_payment_failed(invoice, db: Session):
         logger.warning(f"Payment failed: user_id={user.id}")
         # Note: Don't immediately cancel - Stripe has retry logic
         # Just log for now, subscription status will be updated by subscription.updated event
+
+
+# =============================================================================
+# ADMIN ENDPOINTS (Protected by Admin Secret Key)
+# =============================================================================
+
+@router.post("/admin/grant-unlimited")
+async def admin_grant_unlimited(
+    request: AdminGrantRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Admin endpoint to grant a user permanent unlimited access.
+    Requires the ADMIN_SECRET_KEY to be configured and provided.
+    """
+    # SECURITY: Verify admin secret key
+    if not settings.ADMIN_SECRET_KEY:
+        raise HTTPException(
+            status_code=500,
+            detail="Admin secret key not configured"
+        )
+
+    if request.admin_secret != settings.ADMIN_SECRET_KEY:
+        logger.warning(f"Invalid admin secret attempt for email: {request.email}")
+        raise HTTPException(
+            status_code=403,
+            detail="Invalid admin credentials"
+        )
+
+    # Find user by email
+    user = db.query(User).filter(User.email == request.email.lower()).first()
+
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail=f"User with email {request.email} not found"
+        )
+
+    # Grant permanent unlimited access (100 years)
+    user.subscription_status = "active"
+    user.subscription_tier = "unlimited"
+    user.subscription_expires_at = datetime.now(timezone.utc) + timedelta(days=36500)  # ~100 years
+    user.subscription_id = f"admin_grant_{user.id}_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}"
+    user.auto_renew_enabled = False  # No need for auto-renew on admin grants
+
+    db.commit()
+    db.refresh(user)
+
+    logger.info(f"Admin granted unlimited access to user_id={user.id}, email={user.email}")
+
+    return {
+        "success": True,
+        "message": f"Successfully granted unlimited access to {user.email}",
+        "user_id": user.id,
+        "email": user.email,
+        "tier": "unlimited",
+        "expires_at": user.subscription_expires_at.isoformat()
+    }
 
 
 # =============================================================================

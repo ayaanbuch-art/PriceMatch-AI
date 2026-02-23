@@ -66,6 +66,9 @@ class Settings(BaseSettings):
     # Usage Limits
     FREE_TIER_DAILY_SEARCHES: int = 5
 
+    # Admin Access
+    ADMIN_SECRET_KEY: str = ""  # Secret key for admin operations
+
     class Config:
         env_file = ".env"
         case_sensitive = True
