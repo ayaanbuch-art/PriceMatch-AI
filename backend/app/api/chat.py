@@ -110,8 +110,18 @@ async def chat(
 
         # Add image/search context if provided
         if request.context:
-            conversation_parts.append(f"[CONTEXT: The user has shared or is asking about the following item:\n{request.context}]\n\n")
-            conversation_parts.append("Use this context to provide specific, helpful advice about the item. Reference details like the brand, colors, style, and description when relevant.\n\n")
+            conversation_parts.append(f"""[IMPORTANT CONTEXT - The user just analyzed this item and is asking about it:]
+{request.context}
+
+CRITICAL INSTRUCTIONS:
+- You MUST use the information above to answer questions about this item
+- The user has ALREADY provided the item - they scanned or searched for it
+- DO NOT ask them to describe the item or upload an image - you already have the details above
+- Reference specific details like brand, colors, style, material, and price when answering
+- If they ask general questions like "what do you think?" or "tell me about it", use the context above to provide your analysis
+- Be specific and helpful based on the item details provided
+
+""")
 
         # Add previous messages for context
         for msg in request.history[-10:]:  # Keep last 10 messages for context
