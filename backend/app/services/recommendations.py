@@ -1,4 +1,5 @@
 """Recommendation engine service with tier-based enhancements."""
+import logging
 from typing import List, Dict, Any, Optional, Tuple
 from sqlalchemy.orm import Session
 from sqlalchemy import func, desc
@@ -13,6 +14,8 @@ from ..models import User, UserInteraction, SearchHistory, Favorite
 from ..models.user import SUBSCRIPTION_TIERS
 from ..schemas import Product, GeminiAnalysis
 from ..config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class SimpleCache:
@@ -74,7 +77,6 @@ class APIUsageTracker:
         """Reset counter if it's a new day."""
         today = datetime.now().date()
         if today > self._last_reset_date:
-            print(f"DEBUG [API Tracker]: New day - resetting counter (was {self._calls_today})")
             self._calls_today = 0
             self._last_reset_date = today
 
@@ -87,7 +89,6 @@ class APIUsageTracker:
         """Record an API call."""
         self._maybe_reset()
         self._calls_today += 1
-        print(f"DEBUG [API Tracker]: Call #{self._calls_today}/{self.DAILY_LIMIT} today")
 
     def get_remaining(self) -> int:
         """Get remaining calls for today."""
@@ -366,12 +367,11 @@ class RecommendationService:
         cache_key = hashlib.md5(f"{query}:{limit}".encode()).hexdigest()
         cached_result = self._search_cache.get(cache_key)
         if cached_result is not None:
-            print(f"DEBUG [Cache HIT]: '{query[:50]}...' - returning {len(cached_result)} cached products")
             return cached_result
 
         # Check daily API limit BEFORE making the call
         if not api_tracker.can_make_call():
-            print(f"WARNING [API Limit]: Daily limit reached. Skipping search for '{query[:30]}'")
+            logger.warning("Daily API limit reached. Skipping search.")
             return []
 
         try:
@@ -399,7 +399,7 @@ class RecommendationService:
 
             # Handle rate limiting - return empty instead of raising
             if response.status_code == 429:
-                print(f"WARNING: SerpApi rate limit hit for '{query[:30]}'. Using empty result.")
+                logger.warning("SerpApi rate limit hit. Using empty result.")
                 self._search_cache.set(cache_key, [])  # Cache empty result briefly
                 return []
 
@@ -440,12 +440,11 @@ class RecommendationService:
 
             # Cache the results
             self._search_cache.set(cache_key, products)
-            print(f"DEBUG [Cache MISS]: '{query[:50]}...' - cached {len(products)} products")
 
             return products
 
         except Exception as e:
-            print(f"Error fetching recommendations: {e}")
+            logger.error(f"Error fetching recommendations: {e}")
             # Cache empty result to prevent repeated failed calls
             self._search_cache.set(cache_key, [])
             return []
@@ -595,12 +594,7 @@ class RecommendationService:
         # AGGRESSIVE OPTIMIZATION: Limit to just 2-3 queries max
         queries_to_run = list(dict.fromkeys(queries_to_run))[:3]
 
-        print(f"DEBUG [Personalized]: Running {len(queries_to_run)} queries (limited to conserve API)")
-        print(f"DEBUG [Personalized]: Queries: {queries_to_run}")
-
-        # ===========================================
         # Execute queries and collect products
-        # ===========================================
         for query in queries_to_run:
             try:
                 prods = await self._search_products(query, 4)
@@ -615,7 +609,7 @@ class RecommendationService:
                         if len(all_products) >= products_per_section * 2:
                             break
             except Exception as e:
-                print(f"DEBUG [Personalized]: Error searching '{query}': {e}")
+                logger.error(f"Error searching for personalized recommendations: {e}")
                 continue
 
             if len(all_products) >= products_per_section * 2:
@@ -628,8 +622,6 @@ class RecommendationService:
             remaining = all_products[products_per_section // 2:]
             random.shuffle(remaining)
             all_products = top_products + remaining
-
-        print(f"DEBUG [Personalized]: Found {len(all_products)} personalized products")
 
         return all_products
 
@@ -671,10 +663,7 @@ class RecommendationService:
         cache_key = f"sections:{user.id}:{user.subscription_tier or 'free'}"
         cached_sections = self._sections_cache.get(cache_key)
         if cached_sections is not None:
-            print(f"DEBUG [Sections Cache HIT]: User {user.id} - returning cached sections")
             return cached_sections
-
-        print(f"DEBUG [Sections Cache MISS]: User {user.id} - generating new sections")
 
         prefs = self._get_user_preferences(user, db)
         tier = user.subscription_tier or "free"
@@ -818,7 +807,6 @@ class RecommendationService:
 
         # Cache the sections for this user
         self._sections_cache.set(cache_key, sections)
-        print(f"DEBUG [Sections Cache SET]: User {user.id} - cached {len(sections)} sections")
 
         return sections
 
@@ -833,10 +821,7 @@ class RecommendationService:
         """
         # Clear any cached sections for this user (matches all tier variants)
         count = self._sections_cache.invalidate_prefix(f"sections:{user_id}:")
-        if count > 0:
-            print(f"DEBUG [Cache Invalidated]: User {user_id} - cleared {count} recommendation cache entries")
-            return True
-        return False
+        return count > 0
 
 
 # Singleton instance

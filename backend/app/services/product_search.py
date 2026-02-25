@@ -1,4 +1,5 @@
 """Product search service."""
+import logging
 import httpx
 import random
 import asyncio
@@ -7,6 +8,8 @@ import time
 from typing import List, Tuple, Dict, Any, Optional
 from ..schemas import Product, GeminiAnalysis
 from ..config import settings
+
+logger = logging.getLogger(__name__)
 
 # Import the shared API tracker from recommendations
 from .recommendations import api_tracker, SimpleCache
@@ -109,7 +112,7 @@ class ProductSearchService:
         Search mode: 'exact' prioritizes finding the same item, 'alternatives' focuses on similar/cheaper options.
         """
         if not settings.SERPAPI_API_KEY:
-            print("Warning: No SERPAPI_API_KEY found. Returning empty results.")
+            logger.warning("No SERPAPI_API_KEY found. Returning empty results.")
             return []
 
         all_products = []
@@ -124,26 +127,16 @@ class ProductSearchService:
 
         existing_ids = set()
 
-        print(f"DEBUG: Search mode is '{search_mode}'")
-
-        # ===========================================
-        # API CONSERVATION: Limit to 2 queries max per search!
-        # ===========================================
-
         if search_mode == "exact":
             # EXACT MODE: Just 1-2 API calls total
-            # Query 1: Full brand + item search (most specific)
             exact_query = self._build_exact_query(analysis, gender_prefix)
-            print(f"DEBUG [EXACT MODE]: Primary search: '{exact_query}'")
             exact_products = await self._search_serpapi(exact_query, analysis, is_exact_match=True, num_results=tier_limits["exact_limit"] + 15)
             all_products.extend(exact_products)
             existing_ids = {p.id for p in all_products}
-            print(f"DEBUG [EXACT MODE]: Found {len(exact_products)} exact match products")
 
             # Only do a second query if we got few results
             if len(all_products) < 5:
                 style_query = self._build_style_query(analysis, gender_prefix)
-                print(f"DEBUG [EXACT MODE]: Fallback style search: '{style_query}'")
                 style_products = await self._search_serpapi(style_query, analysis, is_exact_match=True, num_results=15)
                 for product in style_products:
                     if product.id not in existing_ids:
@@ -152,45 +145,34 @@ class ProductSearchService:
 
         else:
             # ALTERNATIVES MODE: Just 2 API calls total
-            # Query 1: Exact match for reference (smaller result set)
             if analysis.brand:
                 exact_query = self._build_exact_query(analysis, gender_prefix)
-                print(f"DEBUG [ALT MODE]: Reference search: '{exact_query}'")
                 exact_products = await self._search_serpapi(exact_query, analysis, is_exact_match=True, num_results=5)
                 all_products.extend(exact_products)
                 existing_ids = {p.id for p in all_products}
 
-            # Query 2: Alternatives with combined keywords (one smart query)
+            # Alternatives with combined keywords
             alt_query = self._build_alternative_query(analysis, gender_prefix)
-            # Add budget/affordable keywords to find cheaper options
             if tier_limits["include_budget"]:
                 alt_query += " affordable"
-            print(f"DEBUG [ALT MODE]: Alternatives search: '{alt_query}'")
             alt_products = await self._search_serpapi(alt_query, analysis, is_exact_match=False, num_results=tier_limits["alt_limit"] + 10)
 
             for product in alt_products:
                 if product.id not in existing_ids:
                     all_products.append(product)
                     existing_ids.add(product.id)
-            print(f"DEBUG [ALT MODE]: Found {len(alt_products)} alternative products")
 
-        # NOTE: Tier-based luxury/trending searches DISABLED to conserve API calls
-        # Users still get differentiated by result limits, not by extra searches
-
-        # STEP 4: Sort results based on search mode
+        # Sort results based on search mode
         if search_mode == "exact":
-            # Exact mode: Sort by similarity (highest first) to show best matches
             all_products.sort(key=lambda p: p.similarity_percentage, reverse=True)
         else:
-            # Alternatives mode: Sort by price (cheapest first) for budget-conscious shopping
             all_products.sort(key=lambda p: p.price if p.price > 0 else float('inf'))
 
-        # STEP 5: Limit to tier maximum
+        # Limit to tier maximum
         max_results = tier_limits["max_total"]
         if len(all_products) > max_results:
             all_products = all_products[:max_results]
 
-        print(f"DEBUG: Returning {len(all_products)} products (tier={tier}, mode={search_mode}, max={max_results})")
         return all_products
 
     def _build_exact_query(self, analysis: GeminiAnalysis, gender_prefix: str) -> str:
@@ -337,15 +319,12 @@ class ProductSearchService:
             cache_key = hashlib.md5(f"search:{query}:{num_results}:{is_exact_match}".encode()).hexdigest()
             cached_result = self._search_cache.get(cache_key)
             if cached_result is not None:
-                print(f"DEBUG [Search Cache HIT]: '{query[:40]}...' - returning {len(cached_result)} cached products")
                 return cached_result
 
             # Check daily API limit
             if not api_tracker.can_make_call():
-                print(f"WARNING [API Limit]: Daily limit reached. Skipping search for '{query[:30]}'")
+                logger.warning(f"Daily API limit reached. Skipping search.")
                 return []
-
-            print(f"DEBUG: Final search query ({len(query)} chars): '{query}'")
 
             # Rate limiting - wait if needed (1 second minimum)
             current_time = time.time()
@@ -369,35 +348,27 @@ class ProductSearchService:
             }
 
             response = await self.client.get("https://serpapi.com/search", params=params)
-            print(f"DEBUG: SerpApi response status: {response.status_code}")
 
             # Handle rate limiting
             if response.status_code == 429:
-                print("WARNING: SerpApi rate limit hit (429). Waiting and retrying...")
+                logger.warning("SerpApi rate limit hit (429). Waiting and retrying...")
                 await asyncio.sleep(2)  # Wait 2 seconds before retry
                 response = await self.client.get("https://serpapi.com/search", params=params)
                 if response.status_code == 429:
-                    print("ERROR: SerpApi rate limit still in effect. Skipping this search.")
+                    logger.error("SerpApi rate limit still in effect. Skipping this search.")
                     return []
 
             response.raise_for_status()
             data = response.json()
 
             if "error" in data:
-                print(f"ERROR: SerpApi returned error: {data['error']}")
+                logger.error(f"SerpApi returned error: {data.get('error', 'Unknown')}")
                 return []
 
             shopping_results = data.get("shopping_results", [])
-            print(f"DEBUG: SerpApi returned {len(shopping_results)} results for query")
-
-            if shopping_results:
-                print(f"DEBUG: First item keys: {list(shopping_results[0].keys())}")
 
             products = []
             for i, item in enumerate(shopping_results):
-                # Debug: print first few items to see structure
-                if i < 2:
-                    print(f"DEBUG: Item {i} data: {item}")
 
                 # Get the best available link
                 # Priority: product_link (direct merchant) > link (Google Shopping page)
@@ -413,14 +384,8 @@ class ProductSearchService:
                         import urllib.parse
                         search_query = urllib.parse.quote(f"{title} {source}")
                         link = f"https://www.google.com/search?q={search_query}&tbm=shop"
-                        print(f"DEBUG: Item {i} - created search fallback link")
                     else:
-                        print(f"DEBUG: Item {i} has no link and no title, skipping")
                         continue
-
-                if i == 0:
-                    print(f"DEBUG: Using link type: {'product_link' if item.get('product_link') else 'link/fallback'}")
-                    print(f"DEBUG: Link value: {link[:100]}...")
 
                 # Extract price - try extracted_price first (numeric), then parse price string
                 price = item.get("extracted_price", 0)
@@ -469,22 +434,19 @@ class ProductSearchService:
 
             # Cache the results
             self._search_cache.set(cache_key, products)
-            print(f"DEBUG [Search Cache SET]: '{query[:40]}...' - cached {len(products)} products")
 
             return products
 
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 429:
-                print(f"ERROR: SerpApi rate limit exceeded (429). Caching empty result.")
+                logger.warning("SerpApi rate limit exceeded (429). Caching empty result.")
             else:
-                print(f"ERROR: SerpApi HTTP error {e.response.status_code}: {e}")
+                logger.error(f"SerpApi HTTP error {e.response.status_code}")
             # Cache empty result to prevent repeated failed calls
             self._search_cache.set(cache_key, [])
             return []
         except Exception as e:
-            import traceback
-            print(f"ERROR: Exception searching products via SerpApi: {e}")
-            traceback.print_exc()
+            logger.error(f"Exception searching products via SerpApi: {e}")
             # Cache empty result to prevent repeated failed calls
             self._search_cache.set(cache_key, [])
             return []
