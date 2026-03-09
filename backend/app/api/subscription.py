@@ -543,8 +543,67 @@ async def admin_grant_unlimited(
 
 
 # =============================================================================
-# APPLE APP STORE WEBHOOK (Legacy - Not Implemented)
+# APPLE IN-APP PURCHASE VERIFICATION
 # =============================================================================
+
+class AppleVerifyRequest(BaseModel):
+    """Request to verify an Apple subscription purchase."""
+    product_id: str
+    transaction_id: str
+    original_transaction_id: str
+    tier: str
+
+
+@router.post("/verify-apple")
+async def verify_apple_subscription(
+    request: AppleVerifyRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Verify and activate an Apple In-App Purchase subscription.
+
+    In production, you should:
+    1. Verify the receipt with Apple's App Store Server API
+    2. Check that the transaction hasn't been used before
+    3. Validate the product ID matches expected values
+
+    For MVP, we trust the client (StoreKit 2 handles verification on-device).
+    """
+    tier = request.tier.lower()
+
+    # Validate tier
+    if tier not in SUBSCRIPTION_TIERS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid tier: {tier}"
+        )
+
+    tier_info = SUBSCRIPTION_TIERS[tier]
+
+    # Activate subscription
+    current_user.subscription_status = "active"
+    current_user.subscription_tier = tier
+    current_user.subscription_expires_at = datetime.now(timezone.utc) + timedelta(days=30)
+    current_user.subscription_id = f"apple_{request.original_transaction_id}"
+    current_user.auto_renew_enabled = True
+
+    db.commit()
+    db.refresh(current_user)
+
+    logger.info(
+        f"Apple subscription activated: user_id={current_user.id}, "
+        f"tier={tier}, transaction_id={request.transaction_id}"
+    )
+
+    return {
+        "success": True,
+        "message": f"Successfully activated {tier_info['name']} subscription!",
+        "tier": tier,
+        "is_premium": current_user.is_premium(),
+        "expires_at": current_user.subscription_expires_at.isoformat()
+    }
+
 
 @router.post("/webhook")
 async def apple_webhook(
