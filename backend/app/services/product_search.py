@@ -37,27 +37,72 @@ class ProductSearchService:
         "purple": ["purple", "lavender", "violet", "plum", "lilac", "mauve", "eggplant"],
     }
 
-    # Item type keywords for filtering
+    # Item type keywords for filtering - comprehensive coverage
     ITEM_TYPE_KEYWORDS = {
-        "t-shirt": ["t-shirt", "tshirt", "tee", "t shirt"],
-        "shirt": ["shirt", "blouse", "button-down", "button down", "oxford"],
-        "hoodie": ["hoodie", "hooded", "sweatshirt", "pullover"],
-        "jacket": ["jacket", "coat", "blazer", "bomber", "windbreaker", "parka", "outerwear"],
-        "sweater": ["sweater", "jumper", "cardigan", "knit", "pullover"],
-        "pants": ["pants", "trousers", "jeans", "chinos", "slacks", "joggers"],
-        "shorts": ["shorts", "bermuda"],
-        "dress": ["dress", "gown", "frock"],
-        "skirt": ["skirt", "midi", "mini skirt", "maxi skirt"],
-        "shoes": ["shoes", "sneakers", "boots", "loafers", "sandals", "heels", "flats", "trainers"],
-        "bag": ["bag", "purse", "handbag", "tote", "backpack", "clutch", "crossbody"],
+        # Tops
+        "t-shirt": ["t-shirt", "tshirt", "tee", "t shirt", "graphic tee"],
+        "shirt": ["shirt", "blouse", "button-down", "button down", "oxford", "polo"],
+        "hoodie": ["hoodie", "hooded", "sweatshirt"],
+        "sweater": ["sweater", "jumper", "cardigan", "knit", "pullover", "crewneck"],
+        "tank": ["tank top", "tank", "camisole", "vest"],
+        "crop top": ["crop top", "cropped", "crop"],
+        # Outerwear
+        "jacket": ["jacket", "blazer", "bomber", "windbreaker", "denim jacket", "leather jacket", "trucker"],
+        "coat": ["coat", "overcoat", "trench", "parka", "peacoat", "puffer", "down jacket"],
+        "vest": ["vest", "gilet", "waistcoat"],
+        # Bottoms
+        "pants": ["pants", "trousers", "chinos", "slacks", "cargo pants", "dress pants"],
+        "jeans": ["jeans", "denim", "skinny jeans", "straight leg", "bootcut", "flare"],
+        "shorts": ["shorts", "bermuda", "swim shorts", "athletic shorts"],
+        "joggers": ["joggers", "sweatpants", "track pants"],
+        "leggings": ["leggings", "tights", "yoga pants"],
+        # Dresses & Skirts
+        "dress": ["dress", "gown", "frock", "maxi dress", "midi dress", "mini dress", "sundress"],
+        "skirt": ["skirt", "midi skirt", "mini skirt", "maxi skirt", "pencil skirt", "pleated skirt"],
+        "jumpsuit": ["jumpsuit", "romper", "playsuit", "overalls"],
+        # Footwear
+        "sneakers": ["sneakers", "trainers", "running shoes", "athletic shoes", "tennis shoes"],
+        "boots": ["boots", "ankle boots", "chelsea boots", "combat boots", "hiking boots", "cowboy boots"],
+        "heels": ["heels", "pumps", "stilettos", "wedges", "platform"],
+        "sandals": ["sandals", "slides", "flip flops", "espadrilles"],
+        "flats": ["flats", "ballet flats", "loafers", "moccasins", "slip-ons"],
+        "shoes": ["shoes", "oxfords", "derby", "dress shoes", "boat shoes"],
+        # Bags
+        "bag": ["bag", "purse", "handbag", "tote", "shoulder bag"],
+        "backpack": ["backpack", "rucksack", "daypack"],
+        "clutch": ["clutch", "evening bag", "wristlet"],
+        "crossbody": ["crossbody", "messenger", "sling bag"],
+        "wallet": ["wallet", "cardholder", "billfold"],
+        # Accessories
+        "hat": ["hat", "cap", "beanie", "fedora", "bucket hat", "snapback", "baseball cap"],
+        "sunglasses": ["sunglasses", "shades", "eyewear", "aviators"],
+        "watch": ["watch", "timepiece", "smartwatch"],
+        "belt": ["belt", "waist belt"],
+        "scarf": ["scarf", "shawl", "wrap", "bandana"],
+        "jewelry": ["necklace", "bracelet", "earrings", "ring", "jewelry", "chain"],
+        "tie": ["tie", "necktie", "bow tie"],
     }
 
     # Sleeve type keywords
     SLEEVE_KEYWORDS = {
         "long sleeve": ["long sleeve", "long-sleeve", "full sleeve"],
         "short sleeve": ["short sleeve", "short-sleeve", "half sleeve"],
-        "sleeveless": ["sleeveless", "tank", "no sleeve"],
+        "sleeveless": ["sleeveless", "tank", "no sleeve", "strapless"],
         "3/4 sleeve": ["3/4 sleeve", "three quarter", "elbow length"],
+    }
+
+    # Pattern/print keywords for better matching
+    PATTERN_KEYWORDS = {
+        "graphic": ["graphic", "print", "logo", "text", "screen print"],
+        "striped": ["striped", "stripes", "stripe"],
+        "plaid": ["plaid", "checkered", "gingham", "tartan"],
+        "floral": ["floral", "flower", "botanical"],
+        "solid": ["solid", "plain", "basic"],
+        "polka dot": ["polka dot", "dotted", "dots"],
+        "camo": ["camo", "camouflage", "military print"],
+        "animal": ["leopard", "zebra", "snake", "animal print"],
+        "geometric": ["geometric", "abstract"],
+        "tie dye": ["tie dye", "tie-dye", "dyed"],
     }
 
     def __init__(self):
@@ -117,6 +162,15 @@ class ProductSearchService:
             for keyword in keywords:
                 if keyword in text_lower:
                     return sleeve_type
+        return None
+
+    def _extract_pattern(self, text: str) -> Optional[str]:
+        """Extract pattern/print type from text."""
+        text_lower = text.lower()
+        for pattern_type, keywords in self.PATTERN_KEYWORDS.items():
+            for keyword in keywords:
+                if keyword in text_lower:
+                    return pattern_type
         return None
 
     def _calculate_real_similarity(
@@ -188,6 +242,22 @@ class ProductSearchService:
                 score -= 20
         else:
             score += 10  # No sleeve expectation, neutral
+
+        # 3.5 Pattern/print match (10 points) - important for graphic tees, striped items, etc.
+        max_score += 10
+        expected_pattern = self._extract_pattern(analysis.item_type)
+        if not expected_pattern:
+            expected_pattern = self._extract_pattern(analysis.detailed_description)
+
+        if expected_pattern:
+            actual_pattern = self._extract_pattern(combined)
+            if actual_pattern == expected_pattern:
+                score += 10
+            elif expected_pattern == "graphic" and actual_pattern is None:
+                # Looking for graphic but found plain - minor penalty
+                score -= 5
+        else:
+            score += 5  # No pattern expectation, neutral
 
         # 4. Material match (10 points)
         max_score += 10
