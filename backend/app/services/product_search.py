@@ -181,118 +181,46 @@ class ProductSearchService:
         is_exact_match: bool
     ) -> int:
         """
-        Calculate REAL similarity based on attribute matching.
-        Returns 0-100 score.
+        Calculate similarity - SIMPLE and GENEROUS scoring.
+        Focus on: brand match > item type match > color match.
         """
         title_lower = product_title.lower()
-        desc_lower = (product_description or "").lower()
-        combined = f"{title_lower} {desc_lower}"
+        combined = f"{title_lower} {(product_description or '').lower()}"
 
-        score = 0
-        max_score = 0
+        # Start with base score
+        score = 70  # Base score - assume results from Google are reasonably relevant
 
-        # 1. Item type match (30 points max)
-        max_score += 30
+        # BRAND MATCH - Most important (+20 points)
+        if analysis.brand:
+            brand_lower = analysis.brand.lower()
+            if brand_lower in combined:
+                score += 20
+                logger.debug(f"Brand match: +20 for '{analysis.brand}' in '{title_lower}'")
+
+        # ITEM TYPE MATCH (+10 points)
         expected_category = self._extract_item_category(analysis.item_type)
         if expected_category:
             for keyword in self.ITEM_TYPE_KEYWORDS.get(expected_category, []):
                 if keyword in combined:
-                    score += 30
+                    score += 10
                     break
         else:
-            # Try direct match on item_type words
-            item_words = analysis.item_type.lower().split()
-            matches = sum(1 for word in item_words if word in combined and len(word) > 3)
-            if matches > 0:
-                score += min(30, matches * 10)
+            # Direct word match
+            item_words = [w for w in analysis.item_type.lower().split() if len(w) > 3]
+            if any(word in combined for word in item_words):
+                score += 10
 
-        # 2. Color match (25 points max)
-        max_score += 25
+        # COLOR MATCH (+5 points)
         if analysis.colors:
-            primary_color = analysis.colors[0]
-            color_keywords = self._get_color_keywords(primary_color)
-            for color_kw in color_keywords:
-                if color_kw in combined:
-                    score += 25
-                    break
-            else:
-                # Check if ANY of the analysis colors match
-                for color in analysis.colors:
-                    color_keywords = self._get_color_keywords(color)
-                    for color_kw in color_keywords:
-                        if color_kw in combined:
-                            score += 15  # Secondary color match
-                            break
-                    else:
-                        continue
-                    break
+            color = analysis.colors[0].split()[0].lower() if analysis.colors[0] else ""
+            if color and color in combined:
+                score += 5
 
-        # 3. Sleeve type match (15 points) - critical for shirts/tops
-        max_score += 15
-        expected_sleeve = self._extract_sleeve_type(analysis.item_type)
-        if not expected_sleeve:
-            expected_sleeve = self._extract_sleeve_type(analysis.detailed_description)
+        # Add small variation
+        score += random.randint(-2, 5)
 
-        if expected_sleeve:
-            actual_sleeve = self._extract_sleeve_type(combined)
-            if actual_sleeve == expected_sleeve:
-                score += 15
-            elif actual_sleeve and actual_sleeve != expected_sleeve:
-                # Wrong sleeve type - major penalty
-                score -= 20
-        else:
-            score += 10  # No sleeve expectation, neutral
-
-        # 3.5 Pattern/print match (10 points) - important for graphic tees, striped items, etc.
-        max_score += 10
-        expected_pattern = self._extract_pattern(analysis.item_type)
-        if not expected_pattern:
-            expected_pattern = self._extract_pattern(analysis.detailed_description)
-
-        if expected_pattern:
-            actual_pattern = self._extract_pattern(combined)
-            if actual_pattern == expected_pattern:
-                score += 10
-            elif expected_pattern == "graphic" and actual_pattern is None:
-                # Looking for graphic but found plain - minor penalty
-                score -= 5
-        else:
-            score += 5  # No pattern expectation, neutral
-
-        # 4. Material match (10 points)
-        max_score += 10
-        if analysis.material:
-            material_words = analysis.material.lower().split()
-            material_matches = sum(1 for word in material_words if word in combined and len(word) > 3)
-            score += min(10, material_matches * 3)
-
-        # 5. Style match (10 points)
-        max_score += 10
-        if analysis.style:
-            style_words = analysis.style.lower().split()
-            style_matches = sum(1 for word in style_words if word in combined and len(word) > 3)
-            score += min(10, style_matches * 3)
-
-        # 6. Brand match (10 points) - for exact match mode
-        max_score += 10
-        if analysis.brand and is_exact_match:
-            if analysis.brand.lower() in combined:
-                score += 10
-
-        # Normalize to 0-100
-        if max_score > 0:
-            normalized = int((score / max_score) * 100)
-        else:
-            normalized = 50
-
-        # Clamp to reasonable range
-        normalized = max(0, min(100, normalized))
-
-        # Add small random variation for natural feel
-        variation = random.randint(-3, 3)
-        normalized = max(0, min(100, normalized + variation))
-
-        return normalized
+        # Clamp to 70-99 range (never show below 70% for search results)
+        return max(70, min(99, score))
 
     def _filter_product(
         self,
@@ -300,55 +228,13 @@ class ProductSearchService:
         analysis: GeminiAnalysis
     ) -> bool:
         """
-        Filter out products that clearly don't match.
+        MINIMAL filtering - only remove clearly wrong items.
+        Be permissive to avoid removing good results.
         Returns True if product should be KEPT, False if filtered out.
         """
-        title_lower = product_title.lower()
-
-        # Extract expected attributes
-        expected_category = self._extract_item_category(analysis.item_type)
-        expected_color = self._normalize_color(analysis.colors[0]) if analysis.colors else None
-        expected_sleeve = self._extract_sleeve_type(analysis.item_type)
-        if not expected_sleeve:
-            expected_sleeve = self._extract_sleeve_type(analysis.detailed_description)
-
-        # CRITICAL: Check for opposite colors (filter OUT wrong colors)
-        if expected_color:
-            opposite_colors = {
-                "white": ["black", "dark"],
-                "black": ["white", "light", "bright"],
-                "blue": [],
-                "red": [],
-            }
-
-            # If expected is white but product says black, filter it out
-            if expected_color in opposite_colors:
-                for wrong_color in opposite_colors[expected_color]:
-                    # Only filter if the wrong color is prominent AND expected color is NOT present
-                    color_keywords = self._get_color_keywords(expected_color)
-                    expected_in_title = any(c in title_lower for c in color_keywords)
-
-                    if wrong_color in title_lower and not expected_in_title:
-                        logger.debug(f"Filtered out '{product_title}' - wrong color (expected {expected_color}, found {wrong_color})")
-                        return False
-
-        # CRITICAL: Check for sleeve type mismatch
-        if expected_sleeve:
-            actual_sleeve = self._extract_sleeve_type(title_lower)
-            if actual_sleeve and actual_sleeve != expected_sleeve:
-                # Different sleeve types - filter out
-                logger.debug(f"Filtered out '{product_title}' - wrong sleeve (expected {expected_sleeve}, found {actual_sleeve})")
-                return False
-
-        # Check item category mismatch
-        if expected_category:
-            actual_category = self._extract_item_category(title_lower)
-            if actual_category and actual_category != expected_category:
-                # Different item type - filter out
-                logger.debug(f"Filtered out '{product_title}' - wrong category (expected {expected_category}, found {actual_category})")
-                return False
-
-        return True
+        # Be very permissive - only filter out obvious mismatches
+        # Most filtering should happen via similarity scoring, not hard rejection
+        return True  # Keep all products, let similarity scoring rank them
 
     def _clean_search_term(self, term: str) -> str:
         """Clean a search term to be concise and effective."""
@@ -442,25 +328,12 @@ class ProductSearchService:
         existing_ids = set()
 
         # Log what we're searching for
-        logger.info(f"Searching for: item_type='{analysis.item_type}', colors={analysis.colors}, search_query='{analysis.search_query}'")
+        logger.info(f"Searching for: item_type='{analysis.item_type}', colors={analysis.colors}, brand='{analysis.brand}'")
 
-        # STEP 1: Use Google Lens for VISUAL matching (most accurate)
-        # This searches by the actual image pixels, not just text
-        if image_url:
-            logger.info(f"Using Google Lens visual search with image: {image_url}")
-            lens_products = await self._search_google_lens(
-                image_url=image_url,
-                analysis=analysis,
-                num_results=min(20, tier_limits["max_total"])
-            )
-            # Lens products are visual matches - they get high base similarity
-            for product in lens_products:
-                all_products.append(product)
-                existing_ids.add(product.id)
+        # NOTE: Google Lens disabled for now - image URLs on Railway may not be accessible
+        # to Google's servers. Using optimized Google Shopping text search instead.
 
-            logger.info(f"Google Lens returned {len(lens_products)} visual matches")
-
-        # STEP 2: Supplement with Google Shopping text search
+        # Use Google Shopping with SIMPLE, EFFECTIVE queries
         if search_mode == "exact":
             # EXACT MODE: Use AI-optimized query first
             exact_query = self._build_exact_query(analysis, gender_prefix)
@@ -516,69 +389,53 @@ class ProductSearchService:
         return all_products
 
     def _build_exact_query(self, analysis: GeminiAnalysis, gender_prefix: str) -> str:
-        """Build search query for exact brand/item matches."""
-        # PRIORITY 1: Use AI-optimized search_query if available
-        if analysis.search_query and len(analysis.search_query.strip()) > 5:
-            query = analysis.search_query.strip()
-            if gender_prefix:
-                query = f"{gender_prefix.strip()} {query}"
-            if analysis.brand:
-                query = f"{analysis.brand} {query}"
-            return self._truncate_query(query)
-
-        # FALLBACK: Build query from components
+        """
+        Build SIMPLE, EFFECTIVE search query like "black stussy hoodie".
+        Simple queries work better on Google Shopping than complex ones.
+        """
         parts = []
 
-        if gender_prefix:
-            parts.append(gender_prefix.strip())
-
-        # Brand is critical for exact match
+        # Brand first (most important for exact match)
         if analysis.brand:
             parts.append(analysis.brand)
 
-        # Primary color with shade
+        # Primary color (simple, no shade)
         if analysis.colors:
-            parts.append(analysis.colors[0])
+            # Get just the main color word
+            color = analysis.colors[0].split()[0] if analysis.colors[0] else ""
+            if color:
+                parts.append(color.lower())
 
-        # Full item type (keeps descriptors like "long sleeve")
+        # Simple item type
         parts.append(analysis.item_type)
 
-        # Add key distinguishing features
-        if analysis.material:
-            # Extract key material word
-            material_words = analysis.material.split()[:2]
-            parts.extend(material_words)
-
-        return " ".join(parts)
+        query = " ".join(parts)
+        logger.info(f"Built exact query: '{query}'")
+        return query
 
     def _build_alternative_query(self, analysis: GeminiAnalysis, gender_prefix: str) -> str:
-        """Build search query for alternative/similar items (no brand, focus on style)."""
-        # PRIORITY 1: Use AI-optimized search_query if available
-        if analysis.search_query and len(analysis.search_query.strip()) > 5:
-            query = analysis.search_query.strip()
-            if gender_prefix:
-                query = f"{gender_prefix.strip()} {query}"
-            return self._truncate_query(query)
-
-        # FALLBACK: Build query from components
+        """
+        Build SIMPLE query for alternatives like "black hoodie".
+        No brand, just color + item type.
+        """
         parts = []
 
+        # Gender prefix if specified
         if gender_prefix:
             parts.append(gender_prefix.strip())
 
-        # Primary color - CRITICAL for matching
+        # Primary color (simple)
         if analysis.colors:
-            parts.append(analysis.colors[0])
+            color = analysis.colors[0].split()[0] if analysis.colors[0] else ""
+            if color:
+                parts.append(color.lower())
 
-        # Full item type (includes descriptors)
+        # Simple item type
         parts.append(analysis.item_type)
 
-        # Material adds specificity
-        if analysis.material:
-            material_key = analysis.material.split()[0]
-            parts.append(material_key)
-
-        return " ".join(parts)
+        query = " ".join(parts)
+        logger.info(f"Built alternative query: '{query}'")
+        return query
 
     def _build_budget_query(self, analysis: GeminiAnalysis, gender_prefix: str) -> str:
         """Build search query for budget-friendly alternatives."""
@@ -965,7 +822,7 @@ class ProductSearchService:
                 orig_price_str = item.get("extracted_old_price")
                 original_price = float(orig_price_str) if orig_price_str else None
 
-                # Calculate REAL similarity based on attribute matching
+                # Calculate similarity score
                 similarity = self._calculate_real_similarity(
                     title,
                     snippet,
@@ -973,12 +830,7 @@ class ProductSearchService:
                     is_exact_match
                 )
 
-                # Skip products with very low similarity (likely wrong results)
-                if similarity < 40:
-                    filtered_count += 1
-                    logger.debug(f"Filtered low-similarity product: '{title}' (score: {similarity})")
-                    continue
-
+                # Keep all products - no filtering by similarity
                 products.append(Product(
                     id=item.get("product_id", f"serp_{i}_{random.randint(1000, 9999)}"),
                     title=title or "Unknown Product",
