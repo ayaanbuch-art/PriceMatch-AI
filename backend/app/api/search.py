@@ -81,6 +81,9 @@ async def search_by_image(
         # Process and save image locally
         local_image_path = await save_image_locally(file)
 
+        # Construct full URL for client/database AND for Google Lens visual search
+        full_image_url = f"{settings.BASE_URL}{local_image_path}"
+
         # Get user's subscription tier for enhanced AI
         user_tier = current_user.subscription_tier or "free"
         tier_features = gemini_service.get_tier_features(user_tier)
@@ -92,16 +95,15 @@ async def search_by_image(
             search_mode=params.search_mode or "alternatives"
         )
 
-        # Search for products with gender filter
+        # Search for products using BOTH Google Lens (visual) AND Google Shopping (text)
+        # Pass image_url to enable visual matching via Google Lens API
         products = await product_search_service.search_products(
             analysis,
             gender=params.gender or "either",
             tier=user_tier,
-            search_mode=params.search_mode or "alternatives"
+            search_mode=params.search_mode or "alternatives",
+            image_url=full_image_url  # Enable Google Lens visual search
         )
-
-        # Construct full URL for client/database
-        full_image_url = f"{settings.BASE_URL}{local_image_path}"
 
         # Save to search history
         search_record = SearchHistory(
