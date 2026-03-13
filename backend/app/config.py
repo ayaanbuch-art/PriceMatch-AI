@@ -60,6 +60,12 @@ class Settings(BaseSettings):
     # Search APIs
     SERPAPI_API_KEY: str = ""
 
+    # Cloudinary for public image URLs (required for Google Lens)
+    # Sign up free at cloudinary.com
+    CLOUDINARY_CLOUD_NAME: str = ""
+    CLOUDINARY_API_KEY: str = ""
+    CLOUDINARY_API_SECRET: str = ""
+
     # Base URL for image paths
     BASE_URL: str = "http://127.0.0.1:8000"
 

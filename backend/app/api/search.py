@@ -9,7 +9,7 @@ from ..database import get_db
 from ..models import User, SearchHistory, UserInteraction
 from ..schemas import SearchResult, SearchHistoryResponse
 from ..utils.auth import get_current_user
-from ..utils.image import save_image_locally
+from ..utils.image import save_image_locally, save_image_with_cloudinary
 from ..utils.validators import SecureSearchParams, SecureImageUpload
 from ..services.gemini import gemini_service
 from ..services.product_search import product_search_service
@@ -78,11 +78,19 @@ async def search_by_image(
                 detail="Invalid file content. File must be a valid image"
             )
 
-        # Process and save image locally
-        local_image_path = await save_image_locally(file)
+        # Process and save image (local + Cloudinary for Google Lens)
+        local_image_path, cloudinary_url = await save_image_with_cloudinary(file)
 
-        # Construct full URL for client/database AND for Google Lens visual search
+        # Construct full URL for client/database
         full_image_url = f"{settings.BASE_URL}{local_image_path}"
+
+        # For Google Lens visual search, prefer Cloudinary URL (publicly accessible)
+        # Fall back to full_image_url if Cloudinary not configured
+        lens_image_url = cloudinary_url if cloudinary_url else full_image_url
+        if cloudinary_url:
+            logger.info(f"Using Cloudinary URL for Google Lens: {cloudinary_url}")
+        else:
+            logger.warning("Cloudinary not configured - Google Lens may not work with local URLs")
 
         # Get user's subscription tier for enhanced AI
         user_tier = current_user.subscription_tier or "free"
@@ -96,13 +104,13 @@ async def search_by_image(
         )
 
         # Search for products using BOTH Google Lens (visual) AND Google Shopping (text)
-        # Pass image_url to enable visual matching via Google Lens API
+        # Pass Cloudinary image_url to enable visual matching via Google Lens API
         products = await product_search_service.search_products(
             analysis,
             gender=params.gender or "either",
             tier=user_tier,
             search_mode=params.search_mode or "alternatives",
-            image_url=full_image_url  # Enable Google Lens visual search
+            image_url=lens_image_url  # Cloudinary URL for Google Lens visual search
         )
 
         # Save to search history

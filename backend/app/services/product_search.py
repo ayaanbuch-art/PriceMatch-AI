@@ -181,46 +181,86 @@ class ProductSearchService:
         is_exact_match: bool
     ) -> int:
         """
-        Calculate similarity - SIMPLE and GENEROUS scoring.
-        Focus on: brand match > item type match > color match.
+        Calculate similarity based on ACTUAL attribute matching.
+
+        Scoring breakdown (max 100):
+        - Brand match: +25 points (most important for exact match)
+        - Item type match: +25 points
+        - Color match: +20 points
+        - Style/features match: +15 points
+        - Base relevance: +15 points (Google results are somewhat relevant)
+
+        For text search, realistic scores range from 55-95% depending on matches.
+        Visual matches from Google Lens get 85-99% (handled separately).
         """
         title_lower = product_title.lower()
-        combined = f"{title_lower} {(product_description or '').lower()}"
+        desc_lower = (product_description or '').lower()
+        combined = f"{title_lower} {desc_lower}"
 
-        # Start with base score
-        score = 70  # Base score - assume results from Google are reasonably relevant
+        score = 15  # Base score - Google results are somewhat relevant
 
-        # BRAND MATCH - Most important (+20 points)
+        # ===== BRAND MATCH (+25 points) =====
+        brand_matched = False
         if analysis.brand:
             brand_lower = analysis.brand.lower()
-            if brand_lower in combined:
-                score += 20
-                logger.debug(f"Brand match: +20 for '{analysis.brand}' in '{title_lower}'")
+            # Check for exact brand name or common variations
+            brand_words = brand_lower.split()
+            if brand_lower in combined or any(word in combined for word in brand_words if len(word) > 2):
+                score += 25
+                brand_matched = True
 
-        # ITEM TYPE MATCH (+10 points)
+        # ===== ITEM TYPE MATCH (+25 points) =====
+        item_matched = False
         expected_category = self._extract_item_category(analysis.item_type)
         if expected_category:
             for keyword in self.ITEM_TYPE_KEYWORDS.get(expected_category, []):
                 if keyword in combined:
-                    score += 10
+                    score += 25
+                    item_matched = True
                     break
-        else:
-            # Direct word match
+        if not item_matched:
+            # Direct word match fallback
             item_words = [w for w in analysis.item_type.lower().split() if len(w) > 3]
             if any(word in combined for word in item_words):
-                score += 10
+                score += 20  # Slightly lower for partial match
 
-        # COLOR MATCH (+5 points)
+        # ===== COLOR MATCH (+20 points) =====
+        color_matched = False
         if analysis.colors:
-            color = analysis.colors[0].split()[0].lower() if analysis.colors[0] else ""
-            if color and color in combined:
-                score += 5
+            primary_color = analysis.colors[0].lower() if analysis.colors[0] else ""
+            # Get base color and all variations
+            color_keywords = self._get_color_keywords(primary_color)
+            for color in color_keywords:
+                if color in combined:
+                    score += 20
+                    color_matched = True
+                    break
 
-        # Add small variation
-        score += random.randint(-2, 5)
+        # ===== STYLE/FEATURES MATCH (+15 points) =====
+        features_matched = 0
+        if analysis.key_features:
+            for feature in analysis.key_features[:3]:  # Check top 3 features
+                feature_words = [w for w in feature.lower().split() if len(w) > 3]
+                if any(word in combined for word in feature_words):
+                    features_matched += 1
 
-        # Clamp to 70-99 range (never show below 70% for search results)
-        return max(70, min(99, score))
+        if features_matched >= 2:
+            score += 15
+        elif features_matched == 1:
+            score += 8
+
+        # Bonus for exact match mode when brand + item both match
+        if is_exact_match and brand_matched and item_matched:
+            score += 5  # Bonus for strong matches in exact mode
+
+        # Small randomization to avoid identical scores (but deterministic feel)
+        # Use hash of title for consistency
+        title_hash = hash(title_lower) % 5
+        score += title_hash - 2  # Range: -2 to +2
+
+        # Clamp to realistic range: 55-95% for text search
+        # (Visual matches from Lens get 85-99%, handled in _search_google_lens)
+        return max(55, min(95, score))
 
     def _filter_product(
         self,
@@ -302,20 +342,19 @@ class ProductSearchService:
         IMPROVED: Combines visual matching (Google Lens) with text search (Google Shopping)
         for much higher accuracy. Visual matches get higher similarity scores.
 
-        Strategy based on subscription tier:
-        - Free: Basic exact matches + limited alternatives (15 max)
-        - Basic: More results + budget alternatives (25 max)
-        - Pro: Luxury + trending searches + enhanced results (40 max)
-        - Unlimited: All features + maximum results (60 max)
+        Strategy based on search_mode:
+        - 'exact': Uses Google Lens FIRST for visual matching (finds exact same item)
+        - 'alternatives': Uses Google Shopping text search to find similar/cheaper options
 
         Gender parameter filters results: 'male', 'female', or 'either'.
-        Search mode: 'exact' prioritizes finding the same item, 'alternatives' focuses on similar/cheaper options.
         """
         if not settings.SERPAPI_API_KEY:
             logger.warning("No SERPAPI_API_KEY found. Returning empty results.")
             return []
 
         all_products = []
+        visual_products = []
+        text_products = []
         tier_limits = self._get_tier_limits(tier)
 
         # Gender prefix for queries
@@ -328,57 +367,73 @@ class ProductSearchService:
         existing_ids = set()
 
         # Log what we're searching for
-        logger.info(f"Searching for: item_type='{analysis.item_type}', colors={analysis.colors}, brand='{analysis.brand}'")
+        logger.info(f"Searching for: item_type='{analysis.item_type}', colors={analysis.colors}, brand='{analysis.brand}', mode='{search_mode}'")
 
-        # NOTE: Google Lens disabled for now - image URLs on Railway may not be accessible
-        # to Google's servers. Using optimized Google Shopping text search instead.
+        # ===== EXACT MODE: Use Google Lens for visual matching =====
+        if search_mode == "exact" and image_url:
+            # Google Lens is critical for "Find Exact Item" mode
+            # It does pixel-level image matching like the actual Google Lens app
+            logger.info(f"EXACT MODE: Using Google Lens with image URL: {image_url}")
+            visual_products = await self._search_google_lens(
+                image_url,
+                analysis,
+                num_results=tier_limits["exact_limit"] + 10
+            )
 
-        # Use Google Shopping with SIMPLE, EFFECTIVE queries
-        if search_mode == "exact":
-            # EXACT MODE: Use AI-optimized query first
-            exact_query = self._build_exact_query(analysis, gender_prefix)
-            logger.info(f"Exact search query: '{exact_query}'")
+            if visual_products:
+                logger.info(f"Google Lens found {len(visual_products)} visual matches")
+                for p in visual_products:
+                    if p.id not in existing_ids:
+                        all_products.append(p)
+                        existing_ids.add(p.id)
 
-            exact_products = await self._search_serpapi(exact_query, analysis, is_exact_match=True, num_results=tier_limits["exact_limit"] + 20)
-            all_products.extend(exact_products)
-            existing_ids = {p.id for p in all_products}
+            # Supplement with text search if we need more results
+            if len(all_products) < 10:
+                exact_query = self._build_exact_query(analysis, gender_prefix)
+                logger.info(f"Supplementing with text search: '{exact_query}'")
+                text_products = await self._search_serpapi(
+                    exact_query, analysis, is_exact_match=True,
+                    num_results=15
+                )
+                for p in text_products:
+                    if p.id not in existing_ids:
+                        all_products.append(p)
+                        existing_ids.add(p.id)
 
-            # Fallback if filtering removed too many results
-            if len(all_products) < 5:
-                logger.info("Few results after filtering, trying fallback query...")
-                style_query = self._build_style_query(analysis, gender_prefix)
-                style_products = await self._search_serpapi(style_query, analysis, is_exact_match=True, num_results=20)
-                for product in style_products:
-                    if product.id not in existing_ids:
-                        all_products.append(product)
-                        existing_ids.add(product.id)
-
+        # ===== ALTERNATIVES MODE: Use text search for cheaper options =====
         else:
-            # ALTERNATIVES MODE: AI-optimized query is critical here
+            # For alternatives, text search works better to find similar but different items
             alt_query = self._build_alternative_query(analysis, gender_prefix)
-            logger.info(f"Alternative search query: '{alt_query}'")
+            logger.info(f"ALTERNATIVES MODE: '{alt_query}'")
 
-            alt_products = await self._search_serpapi(alt_query, analysis, is_exact_match=False, num_results=tier_limits["alt_limit"] + 20)
+            text_products = await self._search_serpapi(
+                alt_query, analysis, is_exact_match=False,
+                num_results=tier_limits["alt_limit"] + 20
+            )
 
-            for product in alt_products:
+            for product in text_products:
                 if product.id not in existing_ids:
                     all_products.append(product)
                     existing_ids.add(product.id)
 
-            # If too few results, try a more specific query with key features
+            # If too few results, try a more specific query
             if len(all_products) < 8:
                 logger.info("Few results, trying feature-focused fallback...")
                 feature_query = self._build_feature_query(analysis, gender_prefix)
-                feature_products = await self._search_serpapi(feature_query, analysis, is_exact_match=False, num_results=20)
+                feature_products = await self._search_serpapi(
+                    feature_query, analysis, is_exact_match=False, num_results=20
+                )
                 for product in feature_products:
                     if product.id not in existing_ids:
                         all_products.append(product)
                         existing_ids.add(product.id)
 
-        # Sort results based on search mode
+        # ===== SORTING =====
         if search_mode == "exact":
+            # For exact match: sort by similarity (visual matches will have higher scores)
             all_products.sort(key=lambda p: p.similarity_percentage, reverse=True)
         else:
+            # For alternatives: sort by PRICE (cheapest first - this is the app's value prop)
             all_products.sort(key=lambda p: p.price if p.price > 0 else float('inf'))
 
         # Limit to tier maximum
@@ -386,6 +441,7 @@ class ProductSearchService:
         if len(all_products) > max_results:
             all_products = all_products[:max_results]
 
+        logger.info(f"Returning {len(all_products)} products (visual: {len(visual_products)}, text: {len(text_products)})")
         return all_products
 
     def _build_exact_query(self, analysis: GeminiAnalysis, gender_prefix: str) -> str:
@@ -628,9 +684,15 @@ class ProductSearchService:
                 if not title or not link:
                     continue
 
-                # Visual matches from Lens are highly accurate - give them 85-98% similarity
-                # We boost scores for visual matches since they're based on actual image matching
-                base_similarity = 85 + random.randint(0, 13)
+                # Visual matches from Lens are HIGHLY accurate - they're pixel-level matches
+                # Position matters: first results are best matches (Google ranks by visual similarity)
+                # Score range: 88-99% for visual matches
+                if i < 3:
+                    base_similarity = 96 + (3 - i)  # Top 3: 97-99%
+                elif i < 8:
+                    base_similarity = 92 + random.randint(0, 3)  # 92-95%
+                else:
+                    base_similarity = 88 + random.randint(0, 3)  # 88-91%
 
                 # Extract price if available
                 price = 0.0
@@ -674,8 +736,12 @@ class ProductSearchService:
                 if not title or not link:
                     continue
 
-                # Shopping results from Lens are also visual matches - 80-95% similarity
-                similarity = 80 + random.randint(0, 15)
+                # Shopping results from Lens are visual matches (slightly lower than visual_matches)
+                # Position matters here too
+                if i < 5:
+                    similarity = 90 + random.randint(0, 5)  # 90-95%
+                else:
+                    similarity = 85 + random.randint(0, 4)  # 85-89%
 
                 price = item.get("extracted_price", 0)
                 if not price:
