@@ -167,13 +167,32 @@ async def privacy_policy():
         <li><strong>Communication:</strong> To send important updates about your account or our services</li>
     </ul>
 
-    <h2>Third-Party Services</h2>
-    <p>We use the following third-party services:</p>
+    <h2>Third-Party AI Services</h2>
+    <p><strong>Important:</strong> Our app uses third-party AI services to provide visual search and fashion analysis. Here's exactly what data is shared:</p>
+
+    <h3>Google Gemini AI (Image Analysis)</h3>
     <ul>
-        <li><strong>Google Gemini AI:</strong> For image analysis and fashion recommendations</li>
+        <li><strong>What we send:</strong> Photos you take or upload for searching</li>
+        <li><strong>Purpose:</strong> To analyze clothing items, identify brands, colors, styles, and features</li>
+        <li><strong>Data retention:</strong> Google processes images in real-time and does not permanently store them for our requests</li>
+        <li><strong>Your consent:</strong> You will be asked to consent before any images are sent to Google Gemini AI</li>
+    </ul>
+
+    <h3>Google Shopping API (Product Search)</h3>
+    <ul>
+        <li><strong>What we send:</strong> Text descriptions of items (derived from AI analysis)</li>
+        <li><strong>Purpose:</strong> To find matching products from online retailers</li>
+        <li><strong>Data retention:</strong> Search queries are not stored by Google with your personal information</li>
+    </ul>
+
+    <h3>Other Third-Party Services</h3>
+    <ul>
         <li><strong>Stripe:</strong> For secure payment processing (we do not store payment card details)</li>
         <li><strong>Apple Sign-In:</strong> For authentication (optional)</li>
+        <li><strong>Cloudinary:</strong> For temporary image hosting during search (images auto-delete after 24 hours)</li>
     </ul>
+
+    <p><strong>All third-party services we use provide the same or equivalent data protection as described in this policy.</strong></p>
 
     <h2>Data Security</h2>
     <p>We implement industry-standard security measures including:</p>
