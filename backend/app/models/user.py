@@ -1,5 +1,5 @@
 """User model."""
-from sqlalchemy import Column, Integer, String, DateTime, Boolean
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, JSON
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from ..database import Base
@@ -60,6 +60,10 @@ class User(Base):
 
     # Stripe customer ID
     stripe_customer_id = Column(String, nullable=True, unique=True)
+
+    # User Preferences (from onboarding)
+    gender_preference = Column(String, default="either")  # 'male', 'female', 'either'
+    style_preferences = Column(JSON, default=list)  # List of styles: ['streetwear', 'vintage', etc.]
 
     # Monthly usage tracking
     monthly_scans_used = Column(Integer, default=0)

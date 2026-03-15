@@ -222,3 +222,47 @@ async def get_me(current_user: User = Depends(get_current_user)):
         **current_user.__dict__,
         is_premium=current_user.is_premium()
     )
+
+
+@router.post("/preferences")
+async def update_preferences(
+    preferences: dict,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Update user preferences from onboarding.
+
+    Expected payload:
+    {
+        "gender_preference": "male" | "female" | "either",
+        "style_preferences": ["streetwear", "vintage", "minimal", ...]
+    }
+    """
+    # Validate gender preference
+    gender = preferences.get("gender_preference", "either")
+    if gender not in ["male", "female", "either"]:
+        gender = "either"
+
+    # Validate style preferences
+    valid_styles = ["streetwear", "minimal", "classic", "athletic", "trendy", "vintage"]
+    styles = preferences.get("style_preferences", [])
+    if isinstance(styles, list):
+        styles = [s.lower() for s in styles if isinstance(s, str) and s.lower() in valid_styles]
+    else:
+        styles = []
+
+    # Update user preferences
+    current_user.gender_preference = gender
+    current_user.style_preferences = styles
+
+    db.commit()
+    db.refresh(current_user)
+
+    logger.info(f"Updated preferences for user {current_user.id}: gender={gender}, styles={styles}")
+
+    return {
+        "success": True,
+        "gender_preference": current_user.gender_preference,
+        "style_preferences": current_user.style_preferences
+    }

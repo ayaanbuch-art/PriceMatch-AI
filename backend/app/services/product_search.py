@@ -515,14 +515,19 @@ class ProductSearchService:
 
     def _build_exact_query(self, analysis: GeminiAnalysis, gender_prefix: str, user_brand: Optional[str] = None) -> str:
         """
-        Build SIMPLE, EFFECTIVE search query like "black stussy hoodie".
+        Build SIMPLE, EFFECTIVE search query like "men's black stussy hoodie".
         Simple queries work better on Google Shopping than complex ones.
 
         If user_brand is provided, use it instead of AI-detected brand.
+        Gender prefix ensures results match the user's preference.
         """
         parts = []
 
-        # Brand first (most important for exact match)
+        # Gender prefix FIRST for better filtering (men's, women's)
+        if gender_prefix:
+            parts.append(gender_prefix.strip())
+
+        # Brand second (most important for exact match)
         # User-provided brand takes priority over AI detection
         if user_brand:
             parts.append(user_brand)

@@ -192,8 +192,14 @@ class RecommendationService:
         return configs.get(tier, configs["free"])
 
     def _get_user_preferences(self, user: User, db: Session) -> Dict[str, Any]:
-        """Extract user preferences from their search history and favorites."""
+        """Extract user preferences from onboarding, search history, and favorites."""
         thirty_days_ago = datetime.now() - timedelta(days=30)
+
+        # ===========================================
+        # ONBOARDING PREFERENCES (highest priority - explicit user choices)
+        # ===========================================
+        onboarding_styles = getattr(user, 'style_preferences', None) or []
+        onboarding_gender = getattr(user, 'gender_preference', None) or "either"
 
         # Get recent searches
         recent_searches = db.query(SearchHistory).filter(
@@ -221,6 +227,13 @@ class RecommendationService:
         price_ranges = []
         search_terms = []    # Actual search terms used
         key_features = []    # Key features from analyses
+
+        # ===========================================
+        # APPLY ONBOARDING STYLES (weight = 5, highest priority)
+        # ===========================================
+        for style in onboarding_styles:
+            style_lower = style.lower()
+            styles[style_lower] = styles.get(style_lower, 0) + 5
 
         # ===========================================
         # ANALYZE SEARCH HISTORY (Gemini Analysis)
@@ -354,6 +367,10 @@ class RecommendationService:
             'has_history': len(recent_searches) > 0,
             'has_favorites': len(favorites) > 0,
             'total_signals': len(recent_searches) + len(favorites) + len(interactions),
+            # Onboarding preferences
+            'onboarding_styles': onboarding_styles,
+            'onboarding_gender': onboarding_gender,
+            'has_onboarding': len(onboarding_styles) > 0,
             # Legacy compatibility
             'categories': item_types,
         }
@@ -506,10 +523,11 @@ class RecommendationService:
     async def _generate_personalized_style_recommendations(
         self,
         prefs: Dict[str, Any],
-        tier_config: Dict[str, Any]
+        tier_config: Dict[str, Any],
+        gender_prefix: str = ""
     ) -> List[Product]:
         """
-        Generate highly personalized recommendations based on user's search history and favorites.
+        Generate highly personalized recommendations based on onboarding, search history, and favorites.
         This powers the "Based on Your Style" section with AI-driven personalization.
         """
         all_products = []
@@ -522,6 +540,15 @@ class RecommendationService:
         queries_to_run = []
 
         # ===========================================
+        # STRATEGY 0: ONBOARDING STYLES (highest priority!)
+        # ===========================================
+        onboarding_styles = prefs.get('onboarding_styles', [])
+        if onboarding_styles:
+            # User explicitly selected these styles during onboarding
+            for style in onboarding_styles[:3]:
+                queries_to_run.append(f"{gender_prefix}{style} fashion clothing")
+
+        # ===========================================
         # STRATEGY 1: Top item types with preferred colors
         # ===========================================
         top_item_types = prefs.get('top_item_types', [])[:4]
@@ -531,9 +558,9 @@ class RecommendationService:
             if top_colors:
                 # Combine item type with top color
                 color = random.choice(top_colors)
-                queries_to_run.append(f"{color} {item_type}")
+                queries_to_run.append(f"{gender_prefix}{color} {item_type}")
             else:
-                queries_to_run.append(f"trendy {item_type}")
+                queries_to_run.append(f"{gender_prefix}trendy {item_type}")
 
         # ===========================================
         # STRATEGY 2: Preferred styles with variety
@@ -543,9 +570,9 @@ class RecommendationService:
             # Pick a random category to pair with the style
             if top_item_types:
                 item = random.choice(top_item_types)
-                queries_to_run.append(f"{style} {item}")
+                queries_to_run.append(f"{gender_prefix}{style} {item}")
             else:
-                queries_to_run.append(f"{style} clothing")
+                queries_to_run.append(f"{gender_prefix}{style} clothing")
 
         # ===========================================
         # STRATEGY 3: Brand-based recommendations
@@ -555,9 +582,9 @@ class RecommendationService:
             # Search for items from brands they like
             if top_item_types:
                 item = random.choice(top_item_types)
-                queries_to_run.append(f"{brand} {item}")
+                queries_to_run.append(f"{gender_prefix}{brand} {item}")
             else:
-                queries_to_run.append(f"{brand} fashion")
+                queries_to_run.append(f"{gender_prefix}{brand} fashion")
 
         # ===========================================
         # STRATEGY 4: Use actual search terms they've used
@@ -565,7 +592,7 @@ class RecommendationService:
         search_terms = prefs.get('search_terms', [])[:3]
         for term in search_terms:
             if term and len(term) > 3:
-                queries_to_run.append(term)
+                queries_to_run.append(f"{gender_prefix}{term}")
 
         # ===========================================
         # STRATEGY 5: Price-aware recommendations
@@ -574,22 +601,30 @@ class RecommendationService:
         if avg_price < 50:
             # User likes budget items
             if top_item_types:
-                queries_to_run.append(f"affordable {top_item_types[0]} under $50")
+                queries_to_run.append(f"{gender_prefix}affordable {top_item_types[0]} under $50")
         elif avg_price > 150:
             # User likes premium items
             if top_item_types:
-                queries_to_run.append(f"premium {top_item_types[0]}")
+                queries_to_run.append(f"{gender_prefix}premium {top_item_types[0]}")
 
         # ===========================================
-        # FALLBACK: If no preferences, use trending items
+        # FALLBACK: If no preferences, use onboarding styles or trending items
         # ===========================================
         if not queries_to_run:
-            queries_to_run = [
-                "streetwear hoodie",
-                "trendy sneakers",
-                "aesthetic jeans",
-                "graphic tee"
-            ]
+            if onboarding_styles:
+                style = random.choice(onboarding_styles)
+                queries_to_run = [
+                    f"{gender_prefix}{style} hoodie",
+                    f"{gender_prefix}{style} sneakers",
+                    f"{gender_prefix}{style} jeans",
+                ]
+            else:
+                queries_to_run = [
+                    f"{gender_prefix}streetwear hoodie",
+                    f"{gender_prefix}trendy sneakers",
+                    f"{gender_prefix}aesthetic jeans",
+                    f"{gender_prefix}graphic tee"
+                ]
 
         # AGGRESSIVE OPTIMIZATION: Limit to just 2-3 queries max
         queries_to_run = list(dict.fromkeys(queries_to_run))[:3]
@@ -670,6 +705,17 @@ class RecommendationService:
         tier_config = self._get_tier_config(tier)
         sections = []
 
+        # Get gender prefix from onboarding preferences
+        gender_pref = prefs.get('onboarding_gender', 'either')
+        gender_prefix = ""
+        if gender_pref == "male":
+            gender_prefix = "men's "
+        elif gender_pref == "female":
+            gender_prefix = "women's "
+
+        # Get onboarding styles for personalization
+        onboarding_styles = prefs.get('onboarding_styles', [])
+
         # Add tier metadata to response
         tier_metadata = {
             "user_tier": tier,
@@ -679,10 +725,15 @@ class RecommendationService:
             "is_premium": tier in ["basic", "pro", "unlimited"],
         }
 
-        # Section 1: Trending Now - SINGLE consolidated query instead of 4 separate ones
-        trending_style = random.choice(self.trending_styles)
-        # One smart query that covers multiple categories
-        trending_query = f"trending {trending_style} fashion hoodie sneakers 2025"
+        # Section 1: Trending Now - use onboarding styles if available
+        if onboarding_styles:
+            # Use user's preferred styles
+            trending_style = random.choice(onboarding_styles)
+        else:
+            trending_style = random.choice(self.trending_styles)
+
+        # One smart query that covers multiple categories - WITH GENDER PREFIX
+        trending_query = f"{gender_prefix}trending {trending_style} fashion hoodie sneakers 2026"
         trending_products = await self._search_products(trending_query, 12)
 
         if trending_products:
@@ -693,9 +744,9 @@ class RecommendationService:
                 "products": [p.dict() for p in trending_products[:tier_config["products_per_section"]]]
             })
 
-        # Section 2: Based on Your Style - AI-PERSONALIZED from history & favorites
-        if prefs['has_history'] or prefs['has_favorites']:
-            style_products = await self._generate_personalized_style_recommendations(prefs, tier_config)
+        # Section 2: Based on Your Style - AI-PERSONALIZED from history, favorites, AND onboarding
+        if prefs['has_history'] or prefs['has_favorites'] or prefs.get('has_onboarding'):
+            style_products = await self._generate_personalized_style_recommendations(prefs, tier_config, gender_prefix)
 
             if style_products:
                 # Build a personalized subtitle
@@ -716,8 +767,8 @@ class RecommendationService:
                     "products": [p.dict() for p in style_products[:tier_config["products_per_section"]]]
                 })
         else:
-            # New user - SINGLE query for variety
-            variety_query = "teen streetwear hoodie sneakers jeans essentials"
+            # New user with no preferences - use gender prefix if available
+            variety_query = f"{gender_prefix}teen streetwear hoodie sneakers jeans essentials"
             variety_products = await self._search_products(variety_query, 12)
 
             if variety_products:
@@ -728,8 +779,8 @@ class RecommendationService:
                     "products": [p.dict() for p in variety_products[:tier_config["products_per_section"]]]
                 })
 
-        # Section 3: Deals For You - SINGLE query instead of 4
-        deal_query = "sale fashion hoodie sneakers jeans under $60"
+        # Section 3: Deals For You - with gender preference
+        deal_query = f"{gender_prefix}sale fashion hoodie sneakers jeans under $60"
         deal_products = await self._search_products(deal_query, 12)
 
         if deal_products:
@@ -740,9 +791,9 @@ class RecommendationService:
                 "products": [p.dict() for p in deal_products[:tier_config["products_per_section"]]]
             })
 
-        # Section 4: Basic+ tier - Fresh Drops (SINGLE query)
+        # Section 4: Basic+ tier - Fresh Drops (with gender preference)
         if tier in ["basic", "pro", "unlimited"]:
-            fresh_query = "new release 2025 sneakers hoodie streetwear"
+            fresh_query = f"{gender_prefix}new release 2026 sneakers hoodie streetwear"
             fresh_products = await self._search_products(fresh_query, 12)
 
             if fresh_products:
@@ -753,9 +804,9 @@ class RecommendationService:
                     "products": [p.dict() for p in fresh_products[:tier_config["products_per_section"]]]
                 })
 
-        # Section 5: Pro+ tier - Luxury Picks (SINGLE query)
+        # Section 5: Pro+ tier - Luxury Picks (with gender preference)
         if tier_config["include_luxury"]:
-            luxury_query = "designer premium luxury streetwear sneakers hoodie"
+            luxury_query = f"{gender_prefix}designer premium luxury streetwear sneakers hoodie"
             luxury_products = await self._search_products(luxury_query, 12)
 
             if luxury_products:
@@ -766,9 +817,9 @@ class RecommendationService:
                     "products": [p.dict() for p in luxury_products[:tier_config["products_per_section"]]]
                 })
 
-        # Section 6: Unlimited tier - Exclusive Finds (SINGLE query)
+        # Section 6: Unlimited tier - Exclusive Finds (with gender preference)
         if tier == "unlimited":
-            exclusive_query = "limited edition exclusive rare vintage sneakers hoodie"
+            exclusive_query = f"{gender_prefix}limited edition exclusive rare vintage sneakers hoodie"
             exclusive_products = await self._search_products(exclusive_query, 12)
 
             if exclusive_products:
@@ -781,8 +832,8 @@ class RecommendationService:
 
         # Fallback if no sections generated (likely due to rate limiting)
         if not sections:
-            # Try ONE last search (not 4!)
-            default_query = "trendy teen fashion hoodie sneakers jeans"
+            # Try ONE last search with gender preference
+            default_query = f"{gender_prefix}trendy teen fashion hoodie sneakers jeans"
             default_products = await self._search_products(default_query, 10)
 
             if default_products:
