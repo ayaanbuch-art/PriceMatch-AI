@@ -24,6 +24,39 @@ logger = logging.getLogger(__name__)
 # Create database tables
 Base.metadata.create_all(bind=engine)
 
+# Run migrations for user preferences columns (safe to run multiple times)
+from sqlalchemy import text
+try:
+    with engine.connect() as conn:
+        # Add gender_preference column if it doesn't exist
+        conn.execute(text("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'users' AND column_name = 'gender_preference'
+                ) THEN
+                    ALTER TABLE users ADD COLUMN gender_preference VARCHAR DEFAULT 'either';
+                END IF;
+            END $$;
+        """))
+        # Add style_preferences column if it doesn't exist
+        conn.execute(text("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'users' AND column_name = 'style_preferences'
+                ) THEN
+                    ALTER TABLE users ADD COLUMN style_preferences JSON DEFAULT '[]';
+                END IF;
+            END $$;
+        """))
+        conn.commit()
+    logger.info("User preferences migration completed successfully")
+except Exception as e:
+    logger.warning(f"Migration check failed (may already exist): {e}")
+
 # Initialize FastAPI app with production settings
 app = FastAPI(
     title="PriceMatch AI API",
@@ -225,7 +258,7 @@ async def privacy_policy():
 
     <h2>Contact Us</h2>
     <p>If you have any questions about this Privacy Policy, please contact us at:</p>
-    <p>Email: <a href="mailto:support@pricematchai.com">support@pricematchai.com</a></p>
+    <p>Email: <a href="mailto:fitcheckai2026@gmail.com">fitcheckai2026@gmail.com</a></p>
 
     <p style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #374151; color: #9ca3af; font-size: 14px;">
         © 2026 PriceMatch AI. All rights reserved.
@@ -311,7 +344,7 @@ async def terms_of_service():
     <p>We reserve the right to modify these terms at any time. Continued use of the service constitutes acceptance of updated terms.</p>
 
     <h2>10. Contact</h2>
-    <p>For questions about these Terms, contact us at: <a href="mailto:support@pricematchai.com">support@pricematchai.com</a></p>
+    <p>For questions about these Terms, contact us at: <a href="mailto:fitcheckai2026@gmail.com">fitcheckai2026@gmail.com</a></p>
 
     <p style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #374151; color: #9ca3af; font-size: 14px;">
         © 2026 PriceMatch AI. All rights reserved.
