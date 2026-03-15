@@ -35,7 +35,9 @@ async def check_search_limit(user: User, db: Session):
 async def search_by_image(
     file: UploadFile = File(...),
     gender: Optional[str] = Form("either"),
-    search_mode: Optional[str] = Form("alternatives"),
+    search_mode: Optional[str] = Form("exact"),
+    user_brand: Optional[str] = Form(None),
+    user_price: Optional[str] = Form(None),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -47,6 +49,8 @@ async def search_by_image(
         file: Image file (JPEG, PNG, GIF, WebP - max 10MB)
         gender: Filter results by 'male', 'female', or 'either'
         search_mode: 'exact' to find the same item, 'alternatives' for similar/cheaper options
+        user_brand: Optional brand name provided by user for better accuracy
+        user_price: Optional price estimate provided by user
     """
     try:
         # Validate search parameters
@@ -100,17 +104,20 @@ async def search_by_image(
         analysis = await gemini_service.analyze_image(
             local_image_path,
             tier=user_tier,
-            search_mode=params.search_mode or "alternatives"
+            search_mode=params.search_mode or "exact"
         )
 
         # Search for products using BOTH Google Lens (visual) AND Google Shopping (text)
         # Pass Cloudinary image_url to enable visual matching via Google Lens API
+        # Pass user-provided brand/price for improved accuracy
         products = await product_search_service.search_products(
             analysis,
             gender=params.gender or "either",
             tier=user_tier,
-            search_mode=params.search_mode or "alternatives",
-            image_url=lens_image_url  # Cloudinary URL for Google Lens visual search
+            search_mode=params.search_mode or "exact",
+            image_url=lens_image_url,  # Cloudinary URL for Google Lens visual search
+            user_brand=user_brand,  # User-provided brand for better accuracy
+            user_price=user_price   # User-provided price estimate
         )
 
         # Save to search history
@@ -295,7 +302,7 @@ async def delete_search(
 async def search_by_text(
     query: str = Form(...),
     gender: Optional[str] = Form("either"),
-    search_mode: Optional[str] = Form("alternatives"),
+    search_mode: Optional[str] = Form("exact"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -335,7 +342,7 @@ async def search_by_text(
         analysis = await gemini_service.analyze_text_query(
             query=query.strip(),
             tier=user_tier,
-            search_mode=params.search_mode or "alternatives"
+            search_mode=params.search_mode or "exact"
         )
 
         # Search for products with gender filter
@@ -343,7 +350,7 @@ async def search_by_text(
             analysis,
             gender=params.gender or "either",
             tier=user_tier,
-            search_mode=params.search_mode or "alternatives"
+            search_mode=params.search_mode or "exact"
         )
 
         # Save to search history (no image for text search)

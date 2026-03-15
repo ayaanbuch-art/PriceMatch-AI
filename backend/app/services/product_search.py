@@ -333,8 +333,10 @@ class ProductSearchService:
         analysis: GeminiAnalysis,
         gender: str = "either",
         tier: str = "free",
-        search_mode: str = "alternatives",
-        image_url: Optional[str] = None
+        search_mode: str = "exact",
+        image_url: Optional[str] = None,
+        user_brand: Optional[str] = None,
+        user_price: Optional[str] = None
     ) -> List[Product]:
         """
         Search for products using BOTH Google Lens (visual) AND Google Shopping (text).
@@ -347,6 +349,8 @@ class ProductSearchService:
         - 'alternatives': Uses Google Shopping text search to find similar/cheaper options
 
         Gender parameter filters results: 'male', 'female', or 'either'.
+
+        User-provided brand/price override AI detection for better accuracy.
         """
         if not settings.SERPAPI_API_KEY:
             logger.warning("No SERPAPI_API_KEY found. Returning empty results.")
@@ -366,19 +370,23 @@ class ProductSearchService:
 
         existing_ids = set()
 
+        # If user provided a brand, use it to override AI detection
+        effective_brand = user_brand.strip() if user_brand and user_brand.strip() else None
+
         # Log what we're searching for
-        logger.info(f"Searching for: item_type='{analysis.item_type}', colors={analysis.colors}, brand='{analysis.brand}', mode='{search_mode}'")
+        logger.info(f"Searching for: item_type='{analysis.item_type}', colors={analysis.colors}, brand='{analysis.brand}', user_brand='{effective_brand}', mode='{search_mode}'")
 
         # ===== EXACT MODE: Use Google Lens for visual matching =====
-        if search_mode == "exact" and image_url:
-            # Google Lens is critical for "Find Exact Item" mode
-            # It does pixel-level image matching like the actual Google Lens app
-            logger.info(f"EXACT MODE: Using Google Lens with image URL: {image_url}")
-            visual_products = await self._search_google_lens(
-                image_url,
-                analysis,
-                num_results=tier_limits["exact_limit"] + 10
-            )
+        if search_mode == "exact":
+            if image_url:
+                # Google Lens is critical for "Find Exact Item" mode
+                # It does pixel-level image matching like the actual Google Lens app
+                logger.info(f"EXACT MODE: Using Google Lens with image URL: {image_url}")
+                visual_products = await self._search_google_lens(
+                    image_url,
+                    analysis,
+                    num_results=tier_limits["exact_limit"] + 10
+                )
 
             if visual_products:
                 logger.info(f"Google Lens found {len(visual_products)} visual matches")
@@ -387,9 +395,9 @@ class ProductSearchService:
                         all_products.append(p)
                         existing_ids.add(p.id)
 
-            # Supplement with text search if we need more results
+            # Supplement with text search if we need more results or had no image
             if len(all_products) < 10:
-                exact_query = self._build_exact_query(analysis, gender_prefix)
+                exact_query = self._build_exact_query(analysis, gender_prefix, effective_brand)
                 logger.info(f"Supplementing with text search: '{exact_query}'")
                 text_products = await self._search_serpapi(
                     exact_query, analysis, is_exact_match=True,
@@ -403,6 +411,7 @@ class ProductSearchService:
         # ===== ALTERNATIVES MODE: Use text search for cheaper options =====
         else:
             # For alternatives, text search works better to find similar but different items
+            # Note: For alternatives, we don't use user_brand since we want different brands
             alt_query = self._build_alternative_query(analysis, gender_prefix)
             logger.info(f"ALTERNATIVES MODE: '{alt_query}'")
 
@@ -444,26 +453,96 @@ class ProductSearchService:
         logger.info(f"Returning {len(all_products)} products (visual: {len(visual_products)}, text: {len(text_products)})")
         return all_products
 
-    def _build_exact_query(self, analysis: GeminiAnalysis, gender_prefix: str) -> str:
+    def _clean_brand(self, brand: str) -> Optional[str]:
+        """
+        Clean up AI-generated brand field to extract just the brand name.
+        Returns None if no valid brand is found.
+        """
+        if not brand:
+            return None
+
+        # Skip if it contains uncertainty indicators
+        uncertainty_phrases = [
+            "unknown", "unidentified", "unclear", "cannot determine",
+            "further inspection", "confidence:", "likelihood:",
+            "could be", "might be", "possibly", "probably",
+            "generic", "no visible", "not visible", "n/a", "none"
+        ]
+
+        brand_lower = brand.lower()
+        for phrase in uncertainty_phrases:
+            if phrase in brand_lower:
+                return None
+
+        # Skip if it's too long (real brand names are short)
+        if len(brand) > 30:
+            return None
+
+        # Skip if it contains parentheses with numbers (like "Confidence: 85")
+        if re.search(r'\([^)]*\d+[^)]*\)', brand):
+            # Try to extract just the part before the parenthesis
+            clean_brand = re.sub(r'\s*\([^)]*\).*', '', brand).strip()
+            if clean_brand and len(clean_brand) <= 30:
+                return clean_brand
+            return None
+
+        return brand.strip()
+
+    def _clean_color(self, color: str) -> str:
+        """Extract just the basic color name from verbose AI descriptions."""
+        if not color:
+            return ""
+
+        # Remove parenthetical content like "(Pantone 17-0230 TCX)"
+        color = re.sub(r'\([^)]*\)', '', color).strip()
+
+        # Get just the first 1-2 words (e.g., "Deep Teal" from "Deep Teal Green")
+        words = color.split()
+        if len(words) > 2:
+            words = words[:2]
+
+        # Return just the main color word if it's a basic color
+        basic_colors = ["black", "white", "gray", "grey", "blue", "red", "green",
+                       "yellow", "orange", "purple", "pink", "brown", "beige",
+                       "navy", "teal", "cream", "tan", "khaki", "olive"]
+
+        for word in words:
+            if word.lower() in basic_colors:
+                return word.lower()
+
+        # Return first word if no basic color found
+        return words[0].lower() if words else ""
+
+    def _build_exact_query(self, analysis: GeminiAnalysis, gender_prefix: str, user_brand: Optional[str] = None) -> str:
         """
         Build SIMPLE, EFFECTIVE search query like "black stussy hoodie".
         Simple queries work better on Google Shopping than complex ones.
+
+        If user_brand is provided, use it instead of AI-detected brand.
         """
         parts = []
 
         # Brand first (most important for exact match)
-        if analysis.brand:
-            parts.append(analysis.brand)
+        # User-provided brand takes priority over AI detection
+        if user_brand:
+            parts.append(user_brand)
+            logger.info(f"Using user-provided brand: '{user_brand}'")
+        else:
+            clean_brand = self._clean_brand(analysis.brand)
+            if clean_brand:
+                parts.append(clean_brand)
 
-        # Primary color (simple, no shade)
+        # Primary color (simple, cleaned)
         if analysis.colors:
-            # Get just the main color word
-            color = analysis.colors[0].split()[0] if analysis.colors[0] else ""
+            color = self._clean_color(analysis.colors[0])
             if color:
-                parts.append(color.lower())
+                parts.append(color)
 
-        # Simple item type
-        parts.append(analysis.item_type)
+        # Simple item type (clean up verbose descriptions)
+        item_type = analysis.item_type
+        # Remove overly specific prefixes
+        item_type = re.sub(r'^(Long-Sleeved|Short-Sleeved|Sleeveless)\s+', '', item_type)
+        parts.append(item_type)
 
         query = " ".join(parts)
         logger.info(f"Built exact query: '{query}'")
@@ -480,14 +559,16 @@ class ProductSearchService:
         if gender_prefix:
             parts.append(gender_prefix.strip())
 
-        # Primary color (simple)
+        # Primary color (simple, cleaned)
         if analysis.colors:
-            color = analysis.colors[0].split()[0] if analysis.colors[0] else ""
+            color = self._clean_color(analysis.colors[0])
             if color:
-                parts.append(color.lower())
+                parts.append(color)
 
-        # Simple item type
-        parts.append(analysis.item_type)
+        # Simple item type (clean up verbose descriptions)
+        item_type = analysis.item_type
+        item_type = re.sub(r'^(Long-Sleeved|Short-Sleeved|Sleeveless)\s+', '', item_type)
+        parts.append(item_type)
 
         query = " ".join(parts)
         logger.info(f"Built alternative query: '{query}'")
