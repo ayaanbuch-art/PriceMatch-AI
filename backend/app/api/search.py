@@ -107,6 +107,15 @@ async def search_by_image(
             search_mode=params.search_mode or "exact"
         )
 
+        # Override AI analysis with user-provided values for better accuracy
+        if user_brand and user_brand.strip():
+            analysis.brand = user_brand.strip()
+            logger.info(f"Using user-provided brand: '{analysis.brand}'")
+
+        if user_price and user_price.strip():
+            analysis.price_estimate = user_price.strip()
+            logger.info(f"Using user-provided price: '{analysis.price_estimate}'")
+
         # Search for products using BOTH Google Lens (visual) AND Google Shopping (text)
         # Pass Cloudinary image_url to enable visual matching via Google Lens API
         # Pass user-provided brand/price for improved accuracy
