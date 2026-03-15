@@ -33,6 +33,7 @@ class AuditAction(str, Enum):
     # Account
     ACCOUNT_DELETED = "account_deleted"
     PROFILE_UPDATED = "profile_updated"
+    DATA_EXPORT = "data_export"
 
     # Security Events
     RATE_LIMIT_EXCEEDED = "rate_limit_exceeded"

@@ -19,6 +19,10 @@ logger = logging.getLogger(__name__)
 # Use 12 rounds for good security/performance balance
 pwd_context = CryptContext(
     schemes=["bcrypt"],
+    
+    
+    
+    
     deprecated="auto",
     bcrypt__default_rounds=12
 )
