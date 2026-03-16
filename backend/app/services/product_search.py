@@ -52,7 +52,7 @@ class ProductSearchService:
         "vest": ["vest", "gilet", "waistcoat"],
         # Bottoms
         "pants": ["pants", "trousers", "chinos", "slacks", "cargo pants", "dress pants"],
-        "jeans": ["jeans", "denim", "skinny jeans", "straight leg", "bootcut", "flare"],
+        "jeans": ["jeans", "denim", "skinny jeans", "straight leg", "bootcut", "flare", "baggy jeans", "wide leg jeans", "mom jeans", "boyfriend jeans", "relaxed jeans", "loose jeans", "tapered jeans"],
         "shorts": ["shorts", "bermuda", "swim shorts", "athletic shorts"],
         "joggers": ["joggers", "sweatpants", "track pants"],
         "leggings": ["leggings", "tights", "yoga pants"],
@@ -515,11 +515,12 @@ class ProductSearchService:
 
     def _build_exact_query(self, analysis: GeminiAnalysis, gender_prefix: str, user_brand: Optional[str] = None) -> str:
         """
-        Build SIMPLE, EFFECTIVE search query like "men's black stussy hoodie".
+        Build SIMPLE, EFFECTIVE search query like "men's black baggy jeans".
         Simple queries work better on Google Shopping than complex ones.
 
         If user_brand is provided, use it instead of AI-detected brand.
         Gender prefix ensures results match the user's preference.
+        Includes fit/silhouette for pants/jeans/tops to get accurate results.
         """
         parts = []
 
@@ -543,10 +544,26 @@ class ProductSearchService:
             if color:
                 parts.append(color)
 
+        # Add fit/silhouette BEFORE item type for pants/jeans/tops
+        # This is CRITICAL - "baggy jeans" vs "skinny jeans" are completely different items
+        if analysis.fit_silhouette:
+            fit_lower = analysis.fit_silhouette.lower()
+            # Extract the key fit word (first word usually)
+            fit_keywords = ["baggy", "wide-leg", "wide leg", "straight-leg", "straight leg",
+                          "bootcut", "skinny", "slim", "relaxed", "mom", "boyfriend",
+                          "tapered", "flare", "loose", "oversized", "fitted", "cropped", "boxy"]
+            for keyword in fit_keywords:
+                if keyword in fit_lower:
+                    parts.append(keyword.replace("-", " "))
+                    logger.info(f"Added fit keyword: '{keyword}'")
+                    break
+
         # Simple item type (clean up verbose descriptions)
         item_type = analysis.item_type
-        # Remove overly specific prefixes
+        # Remove overly specific prefixes that might duplicate fit info
         item_type = re.sub(r'^(Long-Sleeved|Short-Sleeved|Sleeveless)\s+', '', item_type)
+        # Also remove fit words from item_type if we already added them
+        item_type = re.sub(r'^(Baggy|Wide-leg|Straight-leg|Bootcut|Skinny|Slim|Relaxed|Mom|Boyfriend|Tapered|Flare|Loose|Oversized|Fitted|Cropped|Boxy)\s+', '', item_type, flags=re.IGNORECASE)
         parts.append(item_type)
 
         query = " ".join(parts)
@@ -555,8 +572,9 @@ class ProductSearchService:
 
     def _build_alternative_query(self, analysis: GeminiAnalysis, gender_prefix: str) -> str:
         """
-        Build SIMPLE query for alternatives like "black hoodie".
-        No brand, just color + item type.
+        Build SIMPLE query for alternatives like "black baggy jeans".
+        No brand, just color + fit + item type.
+        Includes fit/silhouette for accurate style matching.
         """
         parts = []
 
@@ -570,9 +588,25 @@ class ProductSearchService:
             if color:
                 parts.append(color)
 
+        # Add fit/silhouette BEFORE item type for pants/jeans/tops
+        # This is CRITICAL - "baggy jeans" vs "skinny jeans" are completely different items
+        if analysis.fit_silhouette:
+            fit_lower = analysis.fit_silhouette.lower()
+            # Extract the key fit word (first word usually)
+            fit_keywords = ["baggy", "wide-leg", "wide leg", "straight-leg", "straight leg",
+                          "bootcut", "skinny", "slim", "relaxed", "mom", "boyfriend",
+                          "tapered", "flare", "loose", "oversized", "fitted", "cropped", "boxy"]
+            for keyword in fit_keywords:
+                if keyword in fit_lower:
+                    parts.append(keyword.replace("-", " "))
+                    logger.info(f"Added fit keyword for alternatives: '{keyword}'")
+                    break
+
         # Simple item type (clean up verbose descriptions)
         item_type = analysis.item_type
         item_type = re.sub(r'^(Long-Sleeved|Short-Sleeved|Sleeveless)\s+', '', item_type)
+        # Also remove fit words from item_type if we already added them
+        item_type = re.sub(r'^(Baggy|Wide-leg|Straight-leg|Bootcut|Skinny|Slim|Relaxed|Mom|Boyfriend|Tapered|Flare|Loose|Oversized|Fitted|Cropped|Boxy)\s+', '', item_type, flags=re.IGNORECASE)
         parts.append(item_type)
 
         query = " ".join(parts)
@@ -674,10 +708,25 @@ class ProductSearchService:
 
         # Primary color - ALWAYS include
         if analysis.colors:
-            parts.append(analysis.colors[0])
+            color = self._clean_color(analysis.colors[0])
+            if color:
+                parts.append(color)
 
-        # Item type - ALWAYS include
-        parts.append(analysis.item_type)
+        # Add fit/silhouette - CRITICAL for pants/jeans
+        if analysis.fit_silhouette:
+            fit_lower = analysis.fit_silhouette.lower()
+            fit_keywords = ["baggy", "wide-leg", "wide leg", "straight-leg", "straight leg",
+                          "bootcut", "skinny", "slim", "relaxed", "mom", "boyfriend",
+                          "tapered", "flare", "loose", "oversized", "fitted", "cropped", "boxy"]
+            for keyword in fit_keywords:
+                if keyword in fit_lower:
+                    parts.append(keyword.replace("-", " "))
+                    break
+
+        # Item type - ALWAYS include (clean up fit words that might be duplicated)
+        item_type = analysis.item_type
+        item_type = re.sub(r'^(Baggy|Wide-leg|Straight-leg|Bootcut|Skinny|Slim|Relaxed|Mom|Boyfriend|Tapered|Flare|Loose|Oversized|Fitted|Cropped|Boxy)\s+', '', item_type, flags=re.IGNORECASE)
+        parts.append(item_type)
 
         # Add most important key features (first 2)
         if analysis.key_features and len(analysis.key_features) > 0:

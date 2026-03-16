@@ -27,7 +27,7 @@ class GeminiService:
                 detail="Failed to initialize AI service"
             )
 
-    def _get_tier_prompt(self, tier: str = "free", search_mode: str = "alternatives") -> str:
+    def _get_tier_prompt(self, tier: str = "free", search_mode: str = "exact") -> str:
         """Get the appropriate analysis prompt based on subscription tier and search mode."""
 
         # Search mode specific context
@@ -51,7 +51,10 @@ FASHION-SPECIFIC DETAILS TO IDENTIFY:
 - Primary color with specific shade (e.g., 'Emerald Green', 'Burgundy', 'Cream White')
 - Material/texture description (e.g., 'Ribbed knit', 'Distressed denim', 'Satin-finish', 'Genuine leather')
 - Necklines, sleeve types, closures, hardware details
-- Fit/silhouette (e.g., 'Oversized', 'Slim-fit', 'A-line', 'Relaxed', 'Tailored')
+- Fit/silhouette - THIS IS CRITICAL for accurate results:
+  * For jeans/pants: 'Baggy', 'Wide-leg', 'Straight-leg', 'Bootcut', 'Skinny', 'Slim', 'Relaxed', 'Mom', 'Boyfriend', 'Tapered', 'Flare', 'Loose'
+  * For tops: 'Oversized', 'Slim-fit', 'Relaxed', 'Cropped', 'Fitted', 'Boxy'
+  * For dresses: 'A-line', 'Bodycon', 'Shift', 'Wrap', 'Maxi', 'Mini'
 
 SEARCH TERM PRIORITY: Generate search terms that will find the EXACT product:
 - Include brand name + model if known
@@ -99,7 +102,7 @@ Your tasks:
 2. Describe primary color with SPECIFIC shade (e.g., 'Emerald Green', 'Dusty Rose', 'Charcoal Gray').
 3. Identify material/texture (e.g., 'Ribbed knit', 'Distressed denim', 'Satin-finish', 'Suede').
 4. List 3-5 distinct key features (necklines, sleeve types, closures, hardware, embellishments).
-5. Describe fit/silhouette (e.g., 'Oversized', 'Slim-fit', 'A-line', 'Relaxed', 'Tailored').
+5. Describe fit/silhouette - THIS IS CRITICAL (e.g., for jeans: 'Baggy', 'Wide-leg', 'Skinny', 'Straight-leg', 'Bootcut', 'Mom', 'Boyfriend'; for tops: 'Oversized', 'Slim-fit', 'Relaxed').
 6. Generate style keywords for search optimization.
 7. Create a refined 5-8 word search query string for accurate retail results.
 
@@ -107,13 +110,13 @@ IMPORTANT: Focus ONLY on the main garment or accessory in the foreground. Ignore
 
 Respond in JSON format:
 {{
-    "item_type": "exact fashion category (e.g., 'Midi Wrap Dress', 'Chelsea Ankle Boots', 'Cropped Puffer Jacket')",
+    "item_type": "exact fashion category INCLUDING FIT (e.g., 'Baggy Jeans', 'Skinny Jeans', 'Wide-leg Trousers', 'Oversized Hoodie', 'Midi Wrap Dress', 'Chelsea Ankle Boots')",
     "brand": "brand name if visible, or null if unknown",
     "style": "style aesthetic (e.g., 'Minimalist', 'Streetwear', 'Boho', 'Y2K', 'Old Money', 'Cottagecore')",
     "detailed_description": "2-3 sentence item summary using fashion terminology",
     "colors": ["primary color with shade (e.g., 'Emerald Green')", "secondary color if present"],
     "material": "material/texture description (e.g., 'Ribbed cotton knit', 'Distressed denim', 'Genuine leather')",
-    "fit_silhouette": "fit description (e.g., 'Oversized relaxed fit', 'Slim-fit tailored', 'A-line flared')",
+    "fit_silhouette": "CRITICAL fit description (e.g., 'Baggy loose fit', 'Skinny tight fit', 'Wide-leg relaxed', 'Straight-leg regular', 'Oversized boxy')",
     "key_features": ["neckline/collar type", "sleeve type", "closure type", "hardware/embellishments", "unique details"],
     "estimated_brand_tier": "luxury/premium/mid-range/budget",
     "season_occasion": "when/where to wear this",
@@ -356,7 +359,7 @@ The user should think: "This AI just saved me money and helped me make a smarter
         self,
         image_path: str,
         tier: str = "free",
-        search_mode: str = "alternatives"
+        search_mode: str = "exact"
     ) -> GeminiAnalysis:
         """
         Analyze an image using Gemini Vision to identify and describe the item.
@@ -524,7 +527,7 @@ The user should think: "This AI just saved me money and helped me make a smarter
         self,
         query: str,
         tier: str = "free",
-        search_mode: str = "alternatives"
+        search_mode: str = "exact"
     ) -> GeminiAnalysis:
         """
         Analyze a text query to generate product search terms and analysis.
