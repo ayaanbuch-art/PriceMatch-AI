@@ -155,11 +155,18 @@ async def add_wardrobe_item(
     try:
         cloudinary_service = CloudinaryService()
         image_url = cloudinary_service.upload_image(contents, folder="wardrobe")
+    except RuntimeError as e:
+        # CloudinaryService not configured
+        logger.error(f"Cloudinary not configured: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Image storage not configured: {str(e)}"
+        )
     except Exception as e:
         logger.error(f"Cloudinary upload failed: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to upload image"
+            detail=f"Failed to upload image: {str(e)}"
         )
 
     # Analyze with Gemini
