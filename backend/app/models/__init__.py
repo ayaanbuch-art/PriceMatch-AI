@@ -4,6 +4,7 @@ from .search_history import SearchHistory
 from .favorite import Favorite
 from .user_interaction import UserInteraction
 from .gamification import UserStreak, UserAchievement, StylePoints
+from .feedback import SearchFeedback, PremiumPreviewUsage
 
 __all__ = [
     "User",
@@ -12,5 +13,7 @@ __all__ = [
     "UserInteraction",
     "UserStreak",
     "UserAchievement",
-    "StylePoints"
+    "StylePoints",
+    "SearchFeedback",
+    "PremiumPreviewUsage"
 ]

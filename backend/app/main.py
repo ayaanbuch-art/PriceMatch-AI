@@ -8,7 +8,7 @@ from fastapi.responses import HTMLResponse
 
 from .config import settings
 from .database import engine, Base
-from .api import auth, search, favorites, recommendations, subscription, analytics, chat, gamification, user
+from .api import auth, search, favorites, recommendations, subscription, analytics, chat, gamification, user, feedback
 from .middleware.security import setup_security_middleware
 
 # Configure logging - secure by default
@@ -112,6 +112,7 @@ app.include_router(analytics.router)
 app.include_router(chat.router)
 app.include_router(gamification.router)
 app.include_router(user.router)
+app.include_router(feedback.router)
 
 # Mount static files with security considerations
 static_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static")
