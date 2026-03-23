@@ -266,3 +266,63 @@ async def update_preferences(
         "gender_preference": current_user.gender_preference,
         "style_preferences": current_user.style_preferences
     }
+
+
+@router.post("/sizes")
+async def update_size_preferences(
+    sizes: dict,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Update user size preferences for better search filtering.
+
+    Expected payload:
+    {
+        "tops": "M",       # XS, S, M, L, XL, XXL
+        "bottoms": "32",   # Waist size or S, M, L, etc.
+        "shoes": "10",     # US shoe size
+        "dresses": "S"     # XS, S, M, L, XL, XXL
+    }
+
+    All fields are optional - only provided fields will be updated.
+    """
+    # Valid size categories
+    valid_categories = ["tops", "bottoms", "shoes", "dresses"]
+
+    # Get current sizes or start fresh
+    current_sizes = current_user.preferred_sizes or {}
+
+    # Update with new values (only valid categories)
+    for category in valid_categories:
+        if category in sizes:
+            value = sizes[category]
+            if value is None or value == "":
+                # Remove the size if set to None or empty
+                current_sizes.pop(category, None)
+            elif isinstance(value, str) and len(value) <= 10:
+                # Valid size string (reasonable length)
+                current_sizes[category] = value.strip().upper()
+
+    # Save to database
+    current_user.preferred_sizes = current_sizes if current_sizes else None
+
+    db.commit()
+    db.refresh(current_user)
+
+    logger.info(f"Updated size preferences for user {current_user.id}: {current_sizes}")
+
+    return {
+        "success": True,
+        "preferred_sizes": current_user.preferred_sizes
+    }
+
+
+@router.get("/sizes")
+async def get_size_preferences(
+    current_user: User = Depends(get_current_user)
+):
+    """Get user's saved size preferences."""
+    return {
+        "preferred_sizes": current_user.preferred_sizes or {}
+    }

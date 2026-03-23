@@ -5,6 +5,8 @@ from .favorite import Favorite
 from .user_interaction import UserInteraction
 from .gamification import UserStreak, UserAchievement, StylePoints
 from .feedback import SearchFeedback, PremiumPreviewUsage
+from .price_watch import PriceWatch
+from .community import DupeShare, DupeLike
 
 __all__ = [
     "User",
@@ -15,5 +17,8 @@ __all__ = [
     "UserAchievement",
     "StylePoints",
     "SearchFeedback",
-    "PremiumPreviewUsage"
+    "PremiumPreviewUsage",
+    "PriceWatch",
+    "DupeShare",
+    "DupeLike"
 ]

@@ -65,6 +65,10 @@ class User(Base):
     gender_preference = Column(String, default="either")  # 'male', 'female', 'either'
     style_preferences = Column(JSON, default=list)  # List of styles: ['streetwear', 'vintage', etc.]
 
+    # Size Preferences (for filtering search results)
+    # Format: {"tops": "M", "bottoms": "32", "shoes": "10", "dresses": "S"}
+    preferred_sizes = Column(JSON, nullable=True)
+
     # Monthly usage tracking
     monthly_scans_used = Column(Integer, default=0)
     monthly_scans_reset_at = Column(DateTime(timezone=True), nullable=True)

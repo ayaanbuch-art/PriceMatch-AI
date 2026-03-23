@@ -8,7 +8,7 @@ from fastapi.responses import HTMLResponse
 
 from .config import settings
 from .database import engine, Base
-from .api import auth, search, favorites, recommendations, subscription, analytics, chat, gamification, user, feedback
+from .api import auth, search, favorites, recommendations, subscription, analytics, chat, gamification, user, feedback, price_watch, community
 from .middleware.security import setup_security_middleware
 
 # Configure logging - secure by default
@@ -49,6 +49,18 @@ try:
                     WHERE table_name = 'users' AND column_name = 'style_preferences'
                 ) THEN
                     ALTER TABLE users ADD COLUMN style_preferences JSON DEFAULT '[]';
+                END IF;
+            END $$;
+        """))
+        # Add preferred_sizes column if it doesn't exist
+        conn.execute(text("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'users' AND column_name = 'preferred_sizes'
+                ) THEN
+                    ALTER TABLE users ADD COLUMN preferred_sizes JSON;
                 END IF;
             END $$;
         """))
@@ -113,6 +125,8 @@ app.include_router(chat.router)
 app.include_router(gamification.router)
 app.include_router(user.router)
 app.include_router(feedback.router)
+app.include_router(price_watch.router)
+app.include_router(community.router)
 
 # Mount static files with security considerations
 static_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static")

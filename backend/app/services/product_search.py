@@ -336,7 +336,8 @@ class ProductSearchService:
         search_mode: str = "exact",
         image_url: Optional[str] = None,
         user_brand: Optional[str] = None,
-        user_price: Optional[str] = None
+        user_price: Optional[str] = None,
+        user_sizes: Optional[Dict[str, str]] = None
     ) -> List[Product]:
         """
         Search for products using BOTH Google Lens (visual) AND Google Shopping (text).
@@ -373,8 +374,11 @@ class ProductSearchService:
         # If user provided a brand, use it to override AI detection
         effective_brand = user_brand.strip() if user_brand and user_brand.strip() else None
 
+        # Determine applicable size based on item type and user preferences
+        applicable_size = self._get_applicable_size(analysis.item_type, user_sizes)
+
         # Log what we're searching for
-        logger.info(f"Searching for: item_type='{analysis.item_type}', colors={analysis.colors}, brand='{analysis.brand}', user_brand='{effective_brand}', mode='{search_mode}'")
+        logger.info(f"Searching for: item_type='{analysis.item_type}', colors={analysis.colors}, brand='{analysis.brand}', user_brand='{effective_brand}', size='{applicable_size}', mode='{search_mode}'")
 
         # ===== EXACT MODE: Use Google Lens for visual matching =====
         if search_mode == "exact":
@@ -397,7 +401,7 @@ class ProductSearchService:
 
             # Supplement with text search if we need more results or had no image
             if len(all_products) < 10:
-                exact_query = self._build_exact_query(analysis, gender_prefix, effective_brand)
+                exact_query = self._build_exact_query(analysis, gender_prefix, effective_brand, applicable_size)
                 logger.info(f"Supplementing with text search: '{exact_query}'")
                 text_products = await self._search_serpapi(
                     exact_query, analysis, is_exact_match=True,
@@ -412,7 +416,7 @@ class ProductSearchService:
         else:
             # For alternatives, we want DUPES - cheaper versions of expensive items
             # Note: For alternatives, we don't use user_brand since we want different brands
-            alt_query = self._build_alternative_query(analysis, gender_prefix)
+            alt_query = self._build_alternative_query(analysis, gender_prefix, applicable_size)
             logger.info(f"ALTERNATIVES MODE: '{alt_query}'")
 
             # Parse estimated price to set a maximum price filter
@@ -512,6 +516,51 @@ class ProductSearchService:
             logger.warning(f"Could not parse price estimate '{price_estimate}': {e}")
             return None
 
+    def _get_applicable_size(self, item_type: str, user_sizes: Optional[Dict[str, str]]) -> Optional[str]:
+        """
+        Determine which size category applies to the item type.
+
+        Maps item types to size categories:
+        - tops, shirts, hoodies, sweaters, jackets -> "tops"
+        - jeans, pants, shorts, joggers -> "bottoms"
+        - sneakers, boots, heels, sandals, shoes -> "shoes"
+        - dresses, skirts, jumpsuits -> "dresses"
+
+        Returns the user's size for that category, or None if not set.
+        """
+        if not user_sizes:
+            return None
+
+        item_lower = item_type.lower()
+
+        # Map item types to size categories
+        tops_keywords = ["shirt", "t-shirt", "tee", "hoodie", "sweater", "jacket", "coat",
+                        "blouse", "top", "cardigan", "polo", "tank", "vest", "blazer"]
+        bottoms_keywords = ["jeans", "pants", "shorts", "joggers", "trousers", "leggings",
+                          "chinos", "slacks", "cargo"]
+        shoes_keywords = ["sneakers", "shoes", "boots", "heels", "sandals", "loafers",
+                        "flats", "trainers", "pumps", "slides"]
+        dresses_keywords = ["dress", "skirt", "jumpsuit", "romper", "gown"]
+
+        # Check each category
+        for keyword in tops_keywords:
+            if keyword in item_lower:
+                return user_sizes.get("tops")
+
+        for keyword in bottoms_keywords:
+            if keyword in item_lower:
+                return user_sizes.get("bottoms")
+
+        for keyword in shoes_keywords:
+            if keyword in item_lower:
+                return user_sizes.get("shoes")
+
+        for keyword in dresses_keywords:
+            if keyword in item_lower:
+                return user_sizes.get("dresses")
+
+        return None
+
     def _clean_brand(self, brand: str) -> Optional[str]:
         """
         Clean up AI-generated brand field to extract just the brand name.
@@ -572,14 +621,15 @@ class ProductSearchService:
         # Return first word if no basic color found
         return words[0].lower() if words else ""
 
-    def _build_exact_query(self, analysis: GeminiAnalysis, gender_prefix: str, user_brand: Optional[str] = None) -> str:
+    def _build_exact_query(self, analysis: GeminiAnalysis, gender_prefix: str, user_brand: Optional[str] = None, user_size: Optional[str] = None) -> str:
         """
-        Build SIMPLE, EFFECTIVE search query like "men's black baggy jeans".
+        Build SIMPLE, EFFECTIVE search query like "men's black baggy jeans size M".
         Simple queries work better on Google Shopping than complex ones.
 
         If user_brand is provided, use it instead of AI-detected brand.
         Gender prefix ensures results match the user's preference.
         Includes fit/silhouette for pants/jeans/tops to get accurate results.
+        Size is appended if user has size preferences set.
         """
         parts = []
 
@@ -625,15 +675,21 @@ class ProductSearchService:
         item_type = re.sub(r'^(Baggy|Wide-leg|Straight-leg|Bootcut|Skinny|Slim|Relaxed|Mom|Boyfriend|Tapered|Flare|Loose|Oversized|Fitted|Cropped|Boxy)\s+', '', item_type, flags=re.IGNORECASE)
         parts.append(item_type)
 
+        # Add size filter if user has preferences set
+        if user_size:
+            parts.append(f"size {user_size}")
+            logger.info(f"Added size filter: 'size {user_size}'")
+
         query = " ".join(parts)
         logger.info(f"Built exact query: '{query}'")
         return query
 
-    def _build_alternative_query(self, analysis: GeminiAnalysis, gender_prefix: str) -> str:
+    def _build_alternative_query(self, analysis: GeminiAnalysis, gender_prefix: str, user_size: Optional[str] = None) -> str:
         """
         Build query for CHEAP DUPES/ALTERNATIVES.
         No brand - we want knockoffs and dupes, not the original expensive brand.
         Includes dupe/affordable keywords to find budget options.
+        Size is appended if user has size preferences set.
         """
         parts = []
 
@@ -667,6 +723,11 @@ class ProductSearchService:
         # Also remove fit words from item_type if we already added them
         item_type = re.sub(r'^(Baggy|Wide-leg|Straight-leg|Bootcut|Skinny|Slim|Relaxed|Mom|Boyfriend|Tapered|Flare|Loose|Oversized|Fitted|Cropped|Boxy)\s+', '', item_type, flags=re.IGNORECASE)
         parts.append(item_type)
+
+        # Add size filter if user has preferences set
+        if user_size:
+            parts.append(f"size {user_size}")
+            logger.info(f"Added size filter to alternatives: 'size {user_size}'")
 
         # ADD DUPE/BUDGET KEYWORDS - This is the key to finding cheap alternatives!
         # These keywords help Google return knockoffs, dupes, and budget alternatives
