@@ -119,6 +119,7 @@ async def search_by_image(
         # Search for products using BOTH Google Lens (visual) AND Google Shopping (text)
         # Pass Cloudinary image_url to enable visual matching via Google Lens API
         # Pass user-provided brand/price for improved accuracy
+        # Pass user's size preferences for filtering
         products = await product_search_service.search_products(
             analysis,
             gender=params.gender or "either",
@@ -126,7 +127,8 @@ async def search_by_image(
             search_mode=params.search_mode or "exact",
             image_url=lens_image_url,  # Cloudinary URL for Google Lens visual search
             user_brand=user_brand,  # User-provided brand for better accuracy
-            user_price=user_price   # User-provided price estimate
+            user_price=user_price,  # User-provided price estimate
+            user_sizes=current_user.preferred_sizes  # User's size preferences for filtering
         )
 
         # Save to search history
@@ -354,12 +356,13 @@ async def search_by_text(
             search_mode=params.search_mode or "exact"
         )
 
-        # Search for products with gender filter
+        # Search for products with gender filter and size preferences
         products = await product_search_service.search_products(
             analysis,
             gender=params.gender or "either",
             tier=user_tier,
-            search_mode=params.search_mode or "exact"
+            search_mode=params.search_mode or "exact",
+            user_sizes=current_user.preferred_sizes  # User's size preferences
         )
 
         # Save to search history (no image for text search)

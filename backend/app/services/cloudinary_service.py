@@ -1,4 +1,5 @@
 """Cloudinary service for image uploads."""
+import io
 import logging
 import uuid
 from typing import Optional
@@ -23,9 +24,12 @@ try:
             api_secret=settings.CLOUDINARY_API_SECRET,
             secure=True
         )
-        logger.info("Cloudinary configured successfully")
+        logger.info("Cloudinary configured successfully for wardrobe")
+    else:
+        logger.warning(f"Cloudinary not fully configured: cloud_name={bool(settings.CLOUDINARY_CLOUD_NAME)}, api_key={bool(settings.CLOUDINARY_API_KEY)}, api_secret={bool(settings.CLOUDINARY_API_SECRET)}")
 except ImportError:
     CLOUDINARY_AVAILABLE = False
+    cloudinary = None
     logger.warning("Cloudinary not installed")
 
 
@@ -34,7 +38,10 @@ class CloudinaryService:
 
     def __init__(self):
         if not CLOUDINARY_AVAILABLE:
-            raise RuntimeError("Cloudinary is not configured. Please set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET")
+            raise RuntimeError(
+                "Cloudinary is not configured. Please set CLOUDINARY_CLOUD_NAME, "
+                "CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET environment variables."
+            )
 
     def upload_image(self, image_data: bytes, folder: str = "uploads", public_id: Optional[str] = None) -> str:
         """
@@ -51,9 +58,12 @@ class CloudinaryService:
         try:
             unique_id = public_id or str(uuid.uuid4())
 
+            # Wrap bytes in BytesIO for cloudinary
+            image_buffer = io.BytesIO(image_data)
+
             result = cloudinary.uploader.upload(
-                image_data,
-                public_id=f"pricematch/{folder}/{unique_id}",
+                image_buffer,
+                public_id=f"pricematch_{folder}/{unique_id}",
                 folder=f"pricematch_{folder}",
                 resource_type="image",
                 overwrite=True

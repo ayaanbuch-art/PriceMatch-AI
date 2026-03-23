@@ -149,7 +149,7 @@ class SecureAppleSignIn(BaseModel):
 class SecureSearchParams(BaseModel):
     """Secure search parameters validation."""
     gender: Optional[str] = Field("either", pattern=r'^(male|female|either)$')
-    search_mode: Optional[str] = Field("alternatives", pattern=r'^(exact|alternatives)$')
+    search_mode: Optional[str] = Field("exact", pattern=r'^(exact|alternatives)$')
 
     @field_validator('gender', 'search_mode')
     @classmethod

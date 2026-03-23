@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;700;900&display=swap');
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Nunito', sans-serif;
+      background: #fff;
+      width: 800px;
+    }
+
+    /* HEADER */
+    .header {
+      background: #4F46E5;
+      padding: 28px 60px 24px;
+      text-align: center;
+    }
+    .header .hook {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: #a5b4fc;
+      margin-bottom: 6px;
+    }
+    .header h1 {
+      font-size: 48px;
+      font-weight: 900;
+      color: #fff;
+      line-height: 1.1;
+    }
+    .header h1 span { color: #fbbf24; }
+    .header .sub {
+      font-size: 14px;
+      color: #c7d2fe;
+      margin-top: 6px;
+      line-height: 1.5;
+    }
+    .fish { font-size: 48px; margin-bottom: 4px; display: block; }
+
+    /* WHAT IS IT */
+    .what {
+      background: #f5f3ff;
+      padding: 22px 60px;
+      border-bottom: 3px solid #e0e7ff;
+    }
+    .what .label {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 2.5px;
+      text-transform: uppercase;
+      color: #6366f1;
+      margin-bottom: 6px;
+    }
+    .what p {
+      font-size: 15px;
+      color: #3730a3;
+      line-height: 1.6;
+      font-weight: 700;
+    }
+    .what p span {
+      background: #fbbf24;
+      padding: 0 4px;
+      border-radius: 3px;
+      color: #1e1b4b;
+    }
+
+    /* SECTION SHARED */
+    .section {
+      padding: 22px 60px;
+      border-bottom: 2px solid #f1f5f9;
+    }
+    .section-title {
+      font-size: 18px;
+      font-weight: 900;
+      color: #1e1b4b;
+      margin-bottom: 14px;
+    }
+
+    /* TYPES */
+    .types {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .type {
+      background: #f8fafc;
+      border: 2px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 12px 14px;
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+    }
+    .type-emoji { font-size: 24px; line-height: 1; flex-shrink: 0; }
+    .type-name { font-size: 13px; font-weight: 900; color: #1e293b; margin-bottom: 2px; }
+    .type-desc { font-size: 11.5px; color: #64748b; line-height: 1.4; }
+
+    /* RED FLAGS */
+    .flags { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .flag {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: #fff7ed;
+      border: 2px solid #fed7aa;
+      border-radius: 10px;
+      padding: 10px 14px;
+    }
+    .flag-icon { font-size: 20px; flex-shrink: 0; }
+    .flag-text { font-size: 13px; color: #7c2d12; font-weight: 700; line-height: 1.4; }
+
+    /* WHAT TO DO */
+    .dos { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .do-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      background: #f8fafc;
+      border-radius: 10px;
+      padding: 10px 14px;
+    }
+    .do-circle {
+      width: 30px; height: 30px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px;
+      font-weight: 900;
+      color: #fff;
+      margin-top: 1px;
+    }
+    .do-circle.yes { background: #22c55e; }
+    .do-circle.no  { background: #ef4444; }
+    .do-body strong { font-size: 13px; color: #1e293b; display: block; margin-bottom: 2px; }
+    .do-body span   { font-size: 11.5px; color: #64748b; line-height: 1.4; }
+
+  </style>
+</head>
+<body>
+
+  <!-- HEADER -->
+  <div class="header">
+    <span class="fish">🎣</span>
+    <div class="hook">Cybersecurity</div>
+    <h1>What is <span>Phishing?</span></h1>
+    <p class="sub">How hackers trick you into giving up your info — and how to stop them.</p>
+  </div>
+
+  <!-- WHAT IS IT -->
+  <div class="what">
+    <div class="label">The Basics</div>
+    <p>Phishing is when a hacker pretends to be someone you trust — like your bank or Amazon — to <span>steal your passwords or personal info.</span> They "fish" for victims by sending fake emails, texts, or calls.</p>
+  </div>
+
+  <!-- TYPES -->
+  <div class="section">
+    <div class="section-title">🗂️ Common Types</div>
+    <div class="types">
+      <div class="type">
+        <div class="type-emoji">📧</div>
+        <div>
+          <div class="type-name">Email Phishing</div>
+          <div class="type-desc">Fake emails pretending to be Netflix, PayPal, or your bank.</div>
+        </div>
+      </div>
+      <div class="type">
+        <div class="type-emoji">💬</div>
+        <div>
+          <div class="type-name">Smishing (Texts)</div>
+          <div class="type-desc">"Your package is delayed — click here." Fake texts with bad links.</div>
+        </div>
+      </div>
+      <div class="type">
+        <div class="type-emoji">📞</div>
+        <div>
+          <div class="type-name">Vishing (Calls)</div>
+          <div class="type-desc">Fake calls from "the IRS" or "tech support" trying to scare you.</div>
+        </div>
+      </div>
+      <div class="type">
+        <div class="type-emoji">🎯</div>
+        <div>
+          <div class="type-name">Spear Phishing</div>
+          <div class="type-desc">Targeted attack using your name and details. Harder to spot.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RED FLAGS -->
+  <div class="section">
+    <div class="section-title">🚩 Red Flags to Watch For</div>
+    <div class="flags">
+      <div class="flag">
+        <div class="flag-icon">😱</div>
+        <div class="flag-text">Creates panic — "Act NOW or your account gets deleted!"</div>
+      </div>
+      <div class="flag">
+        <div class="flag-icon">🔗</div>
+        <div class="flag-text">Weird link — like "amaz0n-login.net" instead of amazon.com</div>
+      </div>
+      <div class="flag">
+        <div class="flag-icon">🤷</div>
+        <div class="flag-text">Says "Dear Customer" instead of your actual name</div>
+      </div>
+      <div class="flag">
+        <div class="flag-icon">🔑</div>
+        <div class="flag-text">Asks for your password — no real company ever does this</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- WHAT TO DO -->
+  <div class="section" style="border-bottom:none;">
+    <div class="section-title">✅ What To Do</div>
+    <div class="dos">
+      <div class="do-item">
+        <div class="do-circle yes">✓</div>
+        <div class="do-body">
+          <strong>Slow down before clicking</strong>
+          <span>Ask yourself: Was I expecting this? Take 5 seconds.</span>
+        </div>
+      </div>
+      <div class="do-item">
+        <div class="do-circle yes">✓</div>
+        <div class="do-body">
+          <strong>Go directly to the website</strong>
+          <span>Type the real URL yourself instead of clicking their link.</span>
+        </div>
+      </div>
+      <div class="do-item">
+        <div class="do-circle yes">✓</div>
+        <div class="do-body">
+          <strong>Turn on two-factor authentication</strong>
+          <span>Even if they get your password, 2FA keeps them out.</span>
+        </div>
+      </div>
+      <div class="do-item">
+        <div class="do-circle no">✕</div>
+        <div class="do-body">
+          <strong>Never share your password</strong>
+          <span>Legit companies will never ask for it over email or text.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</body>
+</html>
