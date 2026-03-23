@@ -1,5 +1,5 @@
 """Cloudinary service for image uploads."""
-import io
+import base64
 import logging
 import uuid
 from typing import Optional
@@ -24,7 +24,7 @@ try:
             api_secret=settings.CLOUDINARY_API_SECRET,
             secure=True
         )
-        logger.info("Cloudinary configured successfully for wardrobe")
+        logger.info(f"Cloudinary configured for cloud: {settings.CLOUDINARY_CLOUD_NAME}")
     else:
         logger.warning(f"Cloudinary not fully configured: cloud_name={bool(settings.CLOUDINARY_CLOUD_NAME)}, api_key={bool(settings.CLOUDINARY_API_KEY)}, api_secret={bool(settings.CLOUDINARY_API_SECRET)}")
 except ImportError:
@@ -45,7 +45,7 @@ class CloudinaryService:
 
     def upload_image(self, image_data: bytes, folder: str = "uploads", public_id: Optional[str] = None) -> str:
         """
-        Upload an image to Cloudinary.
+        Upload an image to Cloudinary using base64 data URI.
 
         Args:
             image_data: Raw image bytes
@@ -55,30 +55,28 @@ class CloudinaryService:
         Returns:
             The secure URL of the uploaded image
         """
-        try:
-            unique_id = public_id or str(uuid.uuid4())
+        unique_id = public_id or str(uuid.uuid4())
 
-            # Wrap bytes in BytesIO for cloudinary
-            image_buffer = io.BytesIO(image_data)
+        # Convert to base64 data URI (more reliable than BytesIO)
+        base64_data = base64.b64encode(image_data).decode('utf-8')
+        data_uri = f"data:image/jpeg;base64,{base64_data}"
 
-            result = cloudinary.uploader.upload(
-                image_buffer,
-                public_id=f"pricematch_{folder}/{unique_id}",
-                folder=f"pricematch_{folder}",
-                resource_type="image",
-                overwrite=True
-            )
+        logger.info(f"Uploading image to Cloudinary, size: {len(image_data)} bytes")
 
-            url = result.get("secure_url")
-            if not url:
-                raise ValueError("No URL returned from Cloudinary")
+        result = cloudinary.uploader.upload(
+            data_uri,
+            public_id=f"{folder}/{unique_id}",
+            folder=f"pricematch_{folder}",
+            resource_type="image",
+            overwrite=True
+        )
 
-            logger.info(f"Image uploaded to Cloudinary: {url}")
-            return url
+        url = result.get("secure_url")
+        if not url:
+            raise ValueError(f"No URL returned from Cloudinary. Response: {result}")
 
-        except Exception as e:
-            logger.error(f"Cloudinary upload failed: {e}")
-            raise
+        logger.info(f"Image uploaded to Cloudinary: {url}")
+        return url
 
     def delete_image(self, public_id: str) -> bool:
         """

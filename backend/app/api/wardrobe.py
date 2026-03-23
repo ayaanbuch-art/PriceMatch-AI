@@ -163,10 +163,12 @@ async def add_wardrobe_item(
             detail=f"Image storage not configured: {str(e)}"
         )
     except Exception as e:
-        logger.error(f"Cloudinary upload failed: {e}")
+        import traceback
+        error_details = f"{type(e).__name__}: {str(e)}"
+        logger.error(f"Cloudinary upload failed: {error_details}\n{traceback.format_exc()}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to upload image: {str(e)}"
+            detail=f"Failed to upload image - {error_details}"
         )
 
     # Analyze with Gemini
