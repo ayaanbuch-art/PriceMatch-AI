@@ -7,6 +7,7 @@ from .gamification import UserStreak, UserAchievement, StylePoints
 from .feedback import SearchFeedback, PremiumPreviewUsage
 from .price_watch import PriceWatch
 from .community import DupeShare, DupeLike
+from .wardrobe import WardrobeItem, Outfit
 
 __all__ = [
     "User",
@@ -20,5 +21,7 @@ __all__ = [
     "PremiumPreviewUsage",
     "PriceWatch",
     "DupeShare",
-    "DupeLike"
+    "DupeLike",
+    "WardrobeItem",
+    "Outfit"
 ]

@@ -613,6 +613,149 @@ If the user's description is vague, make reasonable assumptions about what they 
                 detail="Error analyzing text query"
             )
 
+    async def analyze_wardrobe_item(self, image_data: bytes) -> dict:
+        """
+        Analyze a wardrobe item image to extract metadata for categorization.
+
+        Args:
+            image_data: Raw image bytes
+
+        Returns:
+            Dictionary with item metadata
+        """
+        prompt = """You are a fashion wardrobe organization AI.
+Analyze this clothing/accessory item and extract detailed metadata for wardrobe organization.
+
+Respond ONLY with valid JSON in this exact format:
+{
+    "item_type": "top/bottom/dress/outerwear/shoes/accessory",
+    "item_subtype": "specific type (e.g., t-shirt, jeans, sneakers, blazer, scarf)",
+    "brand": "brand name if visible, null otherwise",
+    "color": "primary color (e.g., navy blue, cream, burgundy)",
+    "colors": ["list", "of", "all", "colors"],
+    "material": "fabric/material type (e.g., cotton, denim, leather, wool)",
+    "pattern": "solid/striped/plaid/floral/geometric/printed/other",
+    "style_tags": ["casual", "formal", "streetwear", "minimalist", "bohemian", "classic", "trendy"],
+    "season": "spring/summer/fall/winter/all",
+    "occasions": ["casual", "work", "date", "gym", "formal", "beach", "party"],
+    "formality": "casual/smart-casual/business-casual/formal"
+}
+
+Be specific and accurate. Use fashion industry standard terms."""
+
+        try:
+            import PIL.Image
+            import io
+
+            # Load image from bytes
+            image = PIL.Image.open(io.BytesIO(image_data))
+
+            response = self.model.generate_content([prompt, image])
+
+            # Parse JSON from response
+            response_text = response.text.strip()
+
+            # Remove markdown code blocks if present
+            if response_text.startswith("```json"):
+                response_text = response_text[7:]
+            if response_text.startswith("```"):
+                response_text = response_text[3:]
+            if response_text.endswith("```"):
+                response_text = response_text[:-3]
+
+            response_text = response_text.strip()
+
+            return json.loads(response_text)
+
+        except Exception as e:
+            logger.error(f"Error analyzing wardrobe item: {e}")
+            # Return defaults on failure
+            return {
+                "item_type": "unknown",
+                "item_subtype": None,
+                "brand": None,
+                "color": None,
+                "colors": [],
+                "material": None,
+                "pattern": "solid",
+                "style_tags": [],
+                "season": "all",
+                "occasions": ["casual"],
+                "formality": "casual"
+            }
+
+    async def suggest_outfits(
+        self,
+        wardrobe_items: list,
+        occasion: str = None,
+        season: str = None
+    ) -> dict:
+        """
+        Generate outfit suggestions based on user's wardrobe items.
+
+        Args:
+            wardrobe_items: List of wardrobe item dictionaries with id, type, color, etc.
+            occasion: Optional occasion filter (casual, work, date, etc.)
+            season: Optional season filter
+
+        Returns:
+            Dictionary with outfit suggestions
+        """
+        occasion_context = f"for a {occasion} occasion" if occasion else ""
+        season_context = f"suitable for {season}" if season else ""
+
+        wardrobe_json = json.dumps(wardrobe_items, indent=2)
+
+        prompt = f"""You are a professional fashion stylist AI.
+The user has the following items in their wardrobe:
+
+{wardrobe_json}
+
+Create 3-5 complete outfit combinations {occasion_context} {season_context}.
+
+Rules for outfit creation:
+1. Each outfit should have at least a top and bottom (or a dress)
+2. Consider color coordination and style consistency
+3. Mix items that complement each other
+4. Avoid repeating the same item across all outfits
+
+Respond ONLY with valid JSON in this exact format:
+{{
+    "outfits": [
+        {{
+            "name": "Creative outfit name",
+            "item_ids": [1, 5, 12],
+            "occasion": "suitable occasion",
+            "season": "best season",
+            "reasoning": "Brief explanation of why these items work together"
+        }}
+    ]
+}}
+
+Use the actual item IDs from the wardrobe list provided."""
+
+        try:
+            response = self.model.generate_content([prompt])
+
+            # Parse JSON from response
+            response_text = response.text.strip()
+
+            # Remove markdown code blocks if present
+            if response_text.startswith("```json"):
+                response_text = response_text[7:]
+            if response_text.startswith("```"):
+                response_text = response_text[3:]
+            if response_text.endswith("```"):
+                response_text = response_text[:-3]
+
+            response_text = response_text.strip()
+
+            return json.loads(response_text)
+
+        except Exception as e:
+            logger.error(f"Error suggesting outfits: {e}")
+            return {"outfits": []}
+
 
 # Singleton instance
 gemini_service = GeminiService()
