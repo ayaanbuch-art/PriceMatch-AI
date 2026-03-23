@@ -911,6 +911,10 @@ class ProductSearchService:
                 if price <= 0:
                     price = 0.01
 
+                # Extract rating if available from visual match
+                rating = item.get("rating")
+                reviews_count = item.get("reviews")
+
                 products.append(Product(
                     id=f"lens_vm_{i}_{random.randint(1000, 9999)}",
                     title=title,
@@ -923,7 +927,9 @@ class ProductSearchService:
                     affiliate_link=link,
                     similarity_percentage=base_similarity,
                     brand=source,
-                    category=analysis.item_type
+                    category=analysis.item_type,
+                    rating=rating,
+                    reviews_count=reviews_count
                 ))
 
             # Also process any shopping results from Lens
@@ -952,6 +958,10 @@ class ProductSearchService:
                 if price <= 0:
                     price = 0.01
 
+                # Extract rating from Lens shopping results
+                lens_rating = item.get("rating")
+                lens_reviews = item.get("reviews")
+
                 products.append(Product(
                     id=item.get("product_id", f"lens_shop_{i}_{random.randint(1000, 9999)}"),
                     title=title,
@@ -964,7 +974,9 @@ class ProductSearchService:
                     affiliate_link=link,
                     similarity_percentage=similarity,
                     brand=item.get("source", "Unknown"),
-                    category=analysis.item_type
+                    category=analysis.item_type,
+                    rating=lens_rating,
+                    reviews_count=lens_reviews
                 ))
 
             # Cache results
@@ -1111,6 +1123,16 @@ class ProductSearchService:
                     is_exact_match
                 )
 
+                # Extract rating and reviews count from SerpAPI
+                rating = item.get("rating")
+                reviews_count = item.get("reviews")
+                # Clean up reviews count (sometimes comes as string like "1,234")
+                if isinstance(reviews_count, str):
+                    try:
+                        reviews_count = int(reviews_count.replace(",", ""))
+                    except ValueError:
+                        reviews_count = None
+
                 # Keep all products - no filtering by similarity
                 products.append(Product(
                     id=item.get("product_id", f"serp_{i}_{random.randint(1000, 9999)}"),
@@ -1124,7 +1146,9 @@ class ProductSearchService:
                     affiliate_link=link,
                     similarity_percentage=similarity,
                     brand=item.get("source", "Unknown"),
-                    category=analysis.item_type
+                    category=analysis.item_type,
+                    rating=rating,
+                    reviews_count=reviews_count
                 ))
 
             logger.info(f"After filtering: {len(products)} products kept, {filtered_count} filtered out")

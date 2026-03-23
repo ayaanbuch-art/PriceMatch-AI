@@ -35,6 +35,8 @@ class Product(BaseModel):
     similarity_percentage: int  # 0-100
     brand: Optional[str] = None
     category: Optional[str] = None
+    rating: Optional[float] = None  # Product rating (0-5 stars)
+    reviews_count: Optional[int] = None  # Number of reviews
 
 
 class SearchResult(BaseModel):
