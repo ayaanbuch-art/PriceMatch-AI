@@ -408,16 +408,22 @@ class ProductSearchService:
                         all_products.append(p)
                         existing_ids.add(p.id)
 
-        # ===== ALTERNATIVES MODE: Use text search for cheaper options =====
+        # ===== ALTERNATIVES MODE: Use text search for CHEAPER options =====
         else:
-            # For alternatives, text search works better to find similar but different items
+            # For alternatives, we want DUPES - cheaper versions of expensive items
             # Note: For alternatives, we don't use user_brand since we want different brands
             alt_query = self._build_alternative_query(analysis, gender_prefix)
             logger.info(f"ALTERNATIVES MODE: '{alt_query}'")
 
+            # Parse estimated price to set a maximum price filter
+            # If original is $200, we want dupes under $100 (50% or less)
+            max_price = self._parse_max_price_for_dupes(analysis.price_estimate)
+            logger.info(f"Max price for dupes: ${max_price}" if max_price else "No price cap set")
+
             text_products = await self._search_serpapi(
                 alt_query, analysis, is_exact_match=False,
-                num_results=tier_limits["alt_limit"] + 20
+                num_results=tier_limits["alt_limit"] + 20,
+                max_price=max_price
             )
 
             for product in text_products:
@@ -425,14 +431,27 @@ class ProductSearchService:
                     all_products.append(product)
                     existing_ids.add(product.id)
 
-            # If too few results, try a more specific query
+            # If too few results, try without dupe keywords but still with price filter
             if len(all_products) < 8:
                 logger.info("Few results, trying feature-focused fallback...")
                 feature_query = self._build_feature_query(analysis, gender_prefix)
                 feature_products = await self._search_serpapi(
-                    feature_query, analysis, is_exact_match=False, num_results=20
+                    feature_query, analysis, is_exact_match=False, num_results=20,
+                    max_price=max_price
                 )
                 for product in feature_products:
+                    if product.id not in existing_ids:
+                        all_products.append(product)
+                        existing_ids.add(product.id)
+
+            # If STILL too few results, try without price limit (last resort)
+            if len(all_products) < 5:
+                logger.info("Still few results, trying without price limit...")
+                basic_query = self._build_alternative_query(analysis, gender_prefix).replace(" dupe affordable", "")
+                basic_products = await self._search_serpapi(
+                    basic_query, analysis, is_exact_match=False, num_results=20
+                )
+                for product in basic_products:
                     if product.id not in existing_ids:
                         all_products.append(product)
                         existing_ids.add(product.id)
@@ -452,6 +471,46 @@ class ProductSearchService:
 
         logger.info(f"Returning {len(all_products)} products (visual: {len(visual_products)}, text: {len(text_products)})")
         return all_products
+
+    def _parse_max_price_for_dupes(self, price_estimate: str) -> Optional[float]:
+        """
+        Parse AI's price estimate and return a max price for finding dupes.
+
+        The logic: if original is $200, we want dupes under $80 (40% of original).
+        This ensures we're actually finding CHEAPER alternatives, not similar-priced items.
+
+        Returns None if we can't parse the price (no filter applied).
+        """
+        if not price_estimate:
+            return None
+
+        try:
+            # Extract numbers from strings like "$150-$200", "$180", "Around $200"
+            # Find all numbers in the string
+            numbers = re.findall(r'\d+(?:\.\d+)?', price_estimate)
+            if not numbers:
+                return None
+
+            # If range like "$150-$200", use the higher number
+            # If single number, use that
+            prices = [float(n) for n in numbers]
+            original_price = max(prices)
+
+            if original_price <= 0:
+                return None
+
+            # Set max dupe price at 50% of original (or $50 minimum)
+            # $200 original -> $100 max for dupes
+            # $100 original -> $50 max for dupes
+            # $40 original -> $50 max (minimum threshold)
+            max_dupe_price = max(50, original_price * 0.5)
+
+            logger.info(f"Parsed price estimate '{price_estimate}' -> original ~${original_price}, max dupe ${max_dupe_price}")
+            return max_dupe_price
+
+        except (ValueError, TypeError) as e:
+            logger.warning(f"Could not parse price estimate '{price_estimate}': {e}")
+            return None
 
     def _clean_brand(self, brand: str) -> Optional[str]:
         """
@@ -572,9 +631,9 @@ class ProductSearchService:
 
     def _build_alternative_query(self, analysis: GeminiAnalysis, gender_prefix: str) -> str:
         """
-        Build SIMPLE query for alternatives like "black baggy jeans".
-        No brand, just color + fit + item type.
-        Includes fit/silhouette for accurate style matching.
+        Build query for CHEAP DUPES/ALTERNATIVES.
+        No brand - we want knockoffs and dupes, not the original expensive brand.
+        Includes dupe/affordable keywords to find budget options.
         """
         parts = []
 
@@ -609,8 +668,12 @@ class ProductSearchService:
         item_type = re.sub(r'^(Baggy|Wide-leg|Straight-leg|Bootcut|Skinny|Slim|Relaxed|Mom|Boyfriend|Tapered|Flare|Loose|Oversized|Fitted|Cropped|Boxy)\s+', '', item_type, flags=re.IGNORECASE)
         parts.append(item_type)
 
+        # ADD DUPE/BUDGET KEYWORDS - This is the key to finding cheap alternatives!
+        # These keywords help Google return knockoffs, dupes, and budget alternatives
+        parts.append("dupe affordable")
+
         query = " ".join(parts)
-        logger.info(f"Built alternative query: '{query}'")
+        logger.info(f"Built alternative query (with dupe keywords): '{query}'")
         return query
 
     def _build_budget_query(self, analysis: GeminiAnalysis, gender_prefix: str) -> str:
@@ -918,15 +981,20 @@ class ProductSearchService:
         query: str,
         analysis: GeminiAnalysis,
         is_exact_match: bool,
-        num_results: int = 20
+        num_results: int = 20,
+        max_price: Optional[float] = None
     ) -> List[Product]:
-        """Execute a SerpApi search and parse results with caching."""
+        """Execute a SerpApi search and parse results with caching.
+
+        Args:
+            max_price: If set, filters out products above this price (for finding cheap dupes)
+        """
         try:
             # Truncate query to reasonable length
             query = self._truncate_query(query)
 
-            # Check cache first
-            cache_key = hashlib.md5(f"search:{query}:{num_results}:{is_exact_match}".encode()).hexdigest()
+            # Check cache first (include max_price in cache key)
+            cache_key = hashlib.md5(f"search:{query}:{num_results}:{is_exact_match}:{max_price}".encode()).hexdigest()
             cached_result = self._search_cache.get(cache_key)
             if cached_result is not None:
                 return cached_result
@@ -954,8 +1022,14 @@ class ProductSearchService:
                 "gl": "us",
                 "hl": "en",
                 "num": num_results
-                # Note: We sort results by price in Python after fetching
             }
+
+            # Add price filter if max_price is set (for finding cheap dupes)
+            # SerpAPI supports tbs parameter for price filtering
+            if max_price and max_price > 0:
+                # tbs=mr:1,price:1,ppr_max:{price} filters to products under max price
+                params["tbs"] = f"mr:1,price:1,ppr_max:{int(max_price)}"
+                logger.info(f"Added price filter: max ${int(max_price)}")
 
             response = await self.client.get("https://serpapi.com/search", params=params)
 
@@ -1018,6 +1092,12 @@ class ProductSearchService:
                 # Don't skip items with 0 price - just set a default
                 if price <= 0:
                     price = 0.01  # Set minimal price instead of skipping
+
+                # PRICE FILTER: Skip items above max_price (for finding cheap dupes)
+                if max_price and price > max_price:
+                    logger.debug(f"Skipping expensive item: {title[:50]}... (${price} > ${max_price})")
+                    filtered_count += 1
+                    continue
 
                 # Extract original price if available
                 orig_price_str = item.get("extracted_old_price")
