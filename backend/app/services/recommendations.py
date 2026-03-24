@@ -10,7 +10,7 @@ import hashlib
 import time
 import asyncio
 
-from ..models import User, UserInteraction, SearchHistory, Favorite
+from ..models import User, UserInteraction, SearchHistory, Favorite, WardrobeItem
 from ..models.user import SUBSCRIPTION_TIERS
 from ..schemas import Product, GeminiAnalysis
 from ..config import settings
@@ -344,6 +344,56 @@ class RecommendationService:
                     pass
 
         # ===========================================
+        # ANALYZE WARDROBE ITEMS (HIGH PRIORITY - things user actually owns!)
+        # ===========================================
+        wardrobe_items = db.query(WardrobeItem).filter(
+            WardrobeItem.user_id == user.id
+        ).limit(50).all()
+
+        wardrobe_item_types = {}  # Separate tracking for wardrobe-specific preferences
+        wardrobe_colors = {}
+        wardrobe_styles = {}
+
+        for wardrobe_item in wardrobe_items:
+            # Weight: wardrobe items are things they ACTUALLY OWN, so weight = 4 (very high!)
+            weight = 4
+
+            # Item type (top, bottom, shoes, etc.)
+            if wardrobe_item.item_type:
+                item_type = wardrobe_item.item_type.lower()
+                item_types[item_type] = item_types.get(item_type, 0) + weight
+                wardrobe_item_types[item_type] = wardrobe_item_types.get(item_type, 0) + weight
+
+            # Subtype for more specific matching (t-shirt, jeans, sneakers)
+            if wardrobe_item.item_subtype:
+                subtype = wardrobe_item.item_subtype.lower()
+                item_types[subtype] = item_types.get(subtype, 0) + weight
+                wardrobe_item_types[subtype] = wardrobe_item_types.get(subtype, 0) + weight
+
+            # Colors from wardrobe
+            if wardrobe_item.color:
+                color = wardrobe_item.color.lower()
+                colors[color] = colors.get(color, 0) + weight
+                wardrobe_colors[color] = wardrobe_colors.get(color, 0) + weight
+
+            # Style tags from AI analysis
+            if wardrobe_item.style_tags:
+                for tag in wardrobe_item.style_tags:
+                    tag_lower = tag.lower()
+                    styles[tag_lower] = styles.get(tag_lower, 0) + weight
+                    wardrobe_styles[tag_lower] = wardrobe_styles.get(tag_lower, 0) + weight
+
+            # Material preferences
+            if wardrobe_item.material:
+                material = wardrobe_item.material.lower()
+                materials[material] = materials.get(material, 0) + weight
+
+            # Brand if known
+            if wardrobe_item.brand:
+                brand = wardrobe_item.brand
+                brands[brand] = brands.get(brand, 0) + weight
+
+        # ===========================================
         # COMPUTE TOP PREFERENCES
         # ===========================================
         def get_top_n(d: dict, n: int = 5) -> List[str]:
@@ -366,11 +416,20 @@ class RecommendationService:
             'key_features': list(set(key_features))[:10],
             'has_history': len(recent_searches) > 0,
             'has_favorites': len(favorites) > 0,
-            'total_signals': len(recent_searches) + len(favorites) + len(interactions),
+            'total_signals': len(recent_searches) + len(favorites) + len(interactions) + len(wardrobe_items),
             # Onboarding preferences
             'onboarding_styles': onboarding_styles,
             'onboarding_gender': onboarding_gender,
             'has_onboarding': len(onboarding_styles) > 0,
+            # Wardrobe-based preferences (high value signals!)
+            'wardrobe_item_types': wardrobe_item_types,
+            'top_wardrobe_types': get_top_n(wardrobe_item_types, 5),
+            'wardrobe_colors': wardrobe_colors,
+            'top_wardrobe_colors': get_top_n(wardrobe_colors, 3),
+            'wardrobe_styles': wardrobe_styles,
+            'top_wardrobe_styles': get_top_n(wardrobe_styles, 3),
+            'has_wardrobe': len(wardrobe_items) > 0,
+            'wardrobe_count': len(wardrobe_items),
             # Legacy compatibility
             'categories': item_types,
         }
@@ -540,12 +599,31 @@ class RecommendationService:
         queries_to_run = []
 
         # ===========================================
-        # STRATEGY 0: ONBOARDING STYLES (highest priority!)
+        # STRATEGY 0: WARDROBE-BASED (highest priority - what they actually own!)
+        # ===========================================
+        top_wardrobe_types = prefs.get('top_wardrobe_types', [])
+        top_wardrobe_colors = prefs.get('top_wardrobe_colors', [])
+        top_wardrobe_styles = prefs.get('top_wardrobe_styles', [])
+
+        # If user has wardrobe items, prioritize finding similar items
+        if top_wardrobe_types:
+            for item_type in top_wardrobe_types[:3]:
+                if top_wardrobe_colors:
+                    color = random.choice(top_wardrobe_colors)
+                    queries_to_run.append(f"{gender_prefix}{color} {item_type}")
+                elif top_wardrobe_styles:
+                    style = random.choice(top_wardrobe_styles)
+                    queries_to_run.append(f"{gender_prefix}{style} {item_type}")
+                else:
+                    queries_to_run.append(f"{gender_prefix}trendy {item_type}")
+
+        # ===========================================
+        # STRATEGY 0.5: ONBOARDING STYLES (high priority!)
         # ===========================================
         onboarding_styles = prefs.get('onboarding_styles', [])
         if onboarding_styles:
             # User explicitly selected these styles during onboarding
-            for style in onboarding_styles[:3]:
+            for style in onboarding_styles[:2]:
                 queries_to_run.append(f"{gender_prefix}{style} fashion clothing")
 
         # ===========================================
@@ -744,7 +822,41 @@ class RecommendationService:
                 "products": [p.dict() for p in trending_products[:tier_config["products_per_section"]]]
             })
 
-        # Section 2: Based on Your Style - AI-PERSONALIZED from history, favorites, AND onboarding
+        # Section 2: Similar to Your Closet - items matching what user owns (PRIORITY!)
+        if prefs.get('has_wardrobe') and prefs.get('wardrobe_count', 0) >= 1:
+            # Build query from wardrobe items
+            wardrobe_types = prefs.get('top_wardrobe_types', [])[:3]
+            wardrobe_colors = prefs.get('top_wardrobe_colors', [])[:2]
+            wardrobe_styles = prefs.get('top_wardrobe_styles', [])[:2]
+
+            closet_query_parts = []
+            if wardrobe_types:
+                closet_query_parts.extend(wardrobe_types)
+            if wardrobe_colors:
+                closet_query_parts.append(random.choice(wardrobe_colors))
+            if wardrobe_styles:
+                closet_query_parts.append(random.choice(wardrobe_styles))
+
+            if closet_query_parts:
+                closet_query = f"{gender_prefix}{' '.join(closet_query_parts)} fashion"
+                closet_products = await self._search_products(closet_query, 12)
+
+                if closet_products:
+                    random.shuffle(closet_products)
+                    # Build descriptive subtitle
+                    if wardrobe_types:
+                        type_str = wardrobe_types[0]
+                        subtitle = f"👕 More {type_str}s you'll love"
+                    else:
+                        subtitle = "👕 Matching your wardrobe vibe"
+
+                    sections.append({
+                        "title": "Similar to Your Closet",
+                        "subtitle": subtitle,
+                        "products": [p.dict() for p in closet_products[:tier_config["products_per_section"]]]
+                    })
+
+        # Section 3: Based on Your Style - AI-PERSONALIZED from history, favorites, AND onboarding
         if prefs['has_history'] or prefs['has_favorites'] or prefs.get('has_onboarding'):
             style_products = await self._generate_personalized_style_recommendations(prefs, tier_config, gender_prefix)
 
@@ -766,7 +878,7 @@ class RecommendationService:
                     "subtitle": subtitle,
                     "products": [p.dict() for p in style_products[:tier_config["products_per_section"]]]
                 })
-        else:
+        elif not prefs.get('has_wardrobe'):
             # New user with no preferences - use gender prefix if available
             variety_query = f"{gender_prefix}teen streetwear hoodie sneakers jeans essentials"
             variety_products = await self._search_products(variety_query, 12)
