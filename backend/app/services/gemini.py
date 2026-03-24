@@ -757,5 +757,8 @@ Use the actual item IDs from the wardrobe list provided."""
             return {"outfits": []}
 
 
-# Singleton instance
-gemini_service = GeminiService()
+# Note: GeminiService should be instantiated when needed, not at module load time
+# This ensures environment variables are available when running on Railway
+def get_gemini_service() -> GeminiService:
+    """Get a GeminiService instance. Creates new instance each time to ensure fresh config."""
+    return GeminiService()

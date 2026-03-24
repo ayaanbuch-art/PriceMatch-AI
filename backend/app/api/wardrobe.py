@@ -355,10 +355,12 @@ async def suggest_outfits(
             season=season
         )
     except Exception as e:
-        logger.error(f"Outfit suggestion failed: {e}")
+        import traceback
+        error_details = f"{type(e).__name__}: {str(e)}"
+        logger.error(f"Outfit suggestion failed: {error_details}\n{traceback.format_exc()}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to generate outfit suggestions"
+            detail=f"Failed to generate outfit suggestions - {error_details}"
         )
 
     # Build response with actual item data
