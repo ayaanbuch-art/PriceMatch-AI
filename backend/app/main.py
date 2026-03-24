@@ -150,6 +150,19 @@ async def health_check():
     return {"status": "healthy"}
 
 
+@app.get("/debug/config")
+async def debug_config():
+    """Debug endpoint to check configuration (remove in production)."""
+    return {
+        "cloudinary_cloud_name": "set" if settings.CLOUDINARY_CLOUD_NAME else "MISSING",
+        "cloudinary_api_key": "set" if settings.CLOUDINARY_API_KEY else "MISSING",
+        "cloudinary_api_secret": "set" if settings.CLOUDINARY_API_SECRET else "MISSING",
+        "gemini_api_key": "set" if settings.GOOGLE_GEMINI_API_KEY else "MISSING",
+        "stripe_secret_key": "set" if settings.STRIPE_SECRET_KEY else "MISSING",
+        "environment": settings.ENVIRONMENT,
+    }
+
+
 @app.get("/privacy", response_class=HTMLResponse)
 async def privacy_policy():
     """Privacy Policy page for App Store compliance."""
