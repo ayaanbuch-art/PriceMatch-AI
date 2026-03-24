@@ -353,6 +353,7 @@ class RecommendationService:
         wardrobe_item_types = {}  # Separate tracking for wardrobe-specific preferences
         wardrobe_colors = {}
         wardrobe_styles = {}
+        wardrobe_genders = {"menswear": 0, "womenswear": 0, "unisex": 0}  # Track gender from items
 
         for wardrobe_item in wardrobe_items:
             # Weight: wardrobe items are things they ACTUALLY OWN, so weight = 4 (very high!)
@@ -382,6 +383,17 @@ class RecommendationService:
                     tag_lower = tag.lower()
                     styles[tag_lower] = styles.get(tag_lower, 0) + weight
                     wardrobe_styles[tag_lower] = wardrobe_styles.get(tag_lower, 0) + weight
+                    # Also track gender from style tags
+                    if 'menswear' in tag_lower or 'mens' in tag_lower or "men's" in tag_lower:
+                        wardrobe_genders["menswear"] += weight
+                    elif 'womenswear' in tag_lower or 'womens' in tag_lower or "women's" in tag_lower:
+                        wardrobe_genders["womenswear"] += weight
+
+            # Track gender field if available (new wardrobe items will have this)
+            if hasattr(wardrobe_item, 'gender') and wardrobe_item.gender:
+                gender = wardrobe_item.gender.lower()
+                if gender in wardrobe_genders:
+                    wardrobe_genders[gender] += weight
 
             # Material preferences
             if wardrobe_item.material:
@@ -428,6 +440,8 @@ class RecommendationService:
             'top_wardrobe_colors': get_top_n(wardrobe_colors, 3),
             'wardrobe_styles': wardrobe_styles,
             'top_wardrobe_styles': get_top_n(wardrobe_styles, 3),
+            'wardrobe_genders': wardrobe_genders,
+            'wardrobe_dominant_gender': max(wardrobe_genders, key=wardrobe_genders.get) if any(wardrobe_genders.values()) else None,
             'has_wardrobe': len(wardrobe_items) > 0,
             'wardrobe_count': len(wardrobe_items),
             # Legacy compatibility
@@ -783,13 +797,40 @@ class RecommendationService:
         tier_config = self._get_tier_config(tier)
         sections = []
 
-        # Get gender prefix from onboarding preferences
+        # Get gender prefix from onboarding preferences OR detect from wardrobe
         gender_pref = prefs.get('onboarding_gender', 'either')
         gender_prefix = ""
         if gender_pref == "male":
             gender_prefix = "men's "
         elif gender_pref == "female":
             gender_prefix = "women's "
+        elif gender_pref == "either":
+            # Try to detect gender from wardrobe items
+            wardrobe_dominant_gender = prefs.get('wardrobe_dominant_gender')
+            wardrobe_genders = prefs.get('wardrobe_genders', {})
+
+            # Check wardrobe gender tracking first (most reliable)
+            if wardrobe_dominant_gender == "menswear" and wardrobe_genders.get("menswear", 0) > wardrobe_genders.get("womenswear", 0):
+                gender_prefix = "men's "
+            elif wardrobe_dominant_gender == "womenswear" and wardrobe_genders.get("womenswear", 0) > wardrobe_genders.get("menswear", 0):
+                gender_prefix = "women's "
+            else:
+                # Fallback: check style tags for gender keywords
+                wardrobe_styles = prefs.get('wardrobe_styles', {})
+                wardrobe_types = prefs.get('wardrobe_item_types', {})
+                all_wardrobe_terms = list(wardrobe_styles.keys()) + list(wardrobe_types.keys())
+                all_terms_lower = ' '.join(all_wardrobe_terms).lower()
+
+                mens_keywords = ['menswear', "men's", 'mens', 'masculine', 'male', 'boyfriend']
+                womens_keywords = ['womenswear', "women's", 'womens', 'feminine', 'female', 'girly']
+
+                mens_score = sum(1 for kw in mens_keywords if kw in all_terms_lower)
+                womens_score = sum(1 for kw in womens_keywords if kw in all_terms_lower)
+
+                if mens_score > womens_score:
+                    gender_prefix = "men's "
+                elif womens_score > mens_score:
+                    gender_prefix = "women's "
 
         # Get onboarding styles for personalization
         onboarding_styles = prefs.get('onboarding_styles', [])

@@ -630,16 +630,25 @@ Respond ONLY with valid JSON in this exact format:
 {
     "item_type": "top/bottom/dress/outerwear/shoes/accessory",
     "item_subtype": "specific type (e.g., t-shirt, jeans, sneakers, blazer, scarf)",
+    "gender": "menswear/womenswear/unisex",
     "brand": "brand name if visible, null otherwise",
     "color": "primary color (e.g., navy blue, cream, burgundy)",
     "colors": ["list", "of", "all", "colors"],
     "material": "fabric/material type (e.g., cotton, denim, leather, wool)",
     "pattern": "solid/striped/plaid/floral/geometric/printed/other",
-    "style_tags": ["casual", "formal", "streetwear", "minimalist", "bohemian", "classic", "trendy"],
+    "style_tags": ["casual", "formal", "streetwear", "minimalist", "bohemian", "classic", "trendy", "menswear", "womenswear"],
     "season": "spring/summer/fall/winter/all",
     "occasions": ["casual", "work", "date", "gym", "formal", "beach", "party"],
     "formality": "casual/smart-casual/business-casual/formal"
 }
+
+IMPORTANT: For the "gender" field, determine if this is clearly menswear, womenswear, or unisex based on:
+- Cut and silhouette (e.g., men's boxier cuts vs women's fitted cuts)
+- Style details (e.g., men's button placement vs women's)
+- Design elements (e.g., colors, patterns typical of menswear vs womenswear)
+If the item is clearly designed for men (like men's dress shirts, men's suits), mark as "menswear".
+If clearly for women (like dresses, women's blouses), mark as "womenswear".
+If could be worn by either (like basic t-shirts, hoodies), mark as "unisex".
 
 Be specific and accurate. Use fashion industry standard terms."""
 
@@ -673,6 +682,7 @@ Be specific and accurate. Use fashion industry standard terms."""
             return {
                 "item_type": "unknown",
                 "item_subtype": None,
+                "gender": "unisex",
                 "brand": None,
                 "color": None,
                 "colors": [],
