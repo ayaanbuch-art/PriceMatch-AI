@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import desc
 from pydantic import BaseModel
 from typing import Optional, List
-from datetime import datetime
+from datetime import datetime, timezone
 
 from ..database import get_db
 from ..models import User, WardrobeItem, Outfit
@@ -386,7 +386,7 @@ async def suggest_outfits(
                 isAiSuggested=True,
                 aiReasoning=suggestion.get("reasoning"),
                 isFavorite=False,
-                createdAt=datetime.utcnow()
+                createdAt=datetime.now(timezone.utc)
             ))
 
     return OutfitSuggestionResponse(
