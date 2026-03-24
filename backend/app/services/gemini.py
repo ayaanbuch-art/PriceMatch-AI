@@ -757,8 +757,15 @@ Use the actual item IDs from the wardrobe list provided."""
             return {"outfits": []}
 
 
-# Note: GeminiService should be instantiated when needed, not at module load time
+# Lazy singleton - only created when first accessed, not at module load time
 # This ensures environment variables are available when running on Railway
-def get_gemini_service() -> GeminiService:
-    """Get a GeminiService instance. Creates new instance each time to ensure fresh config."""
-    return GeminiService()
+class _GeminiServiceProxy:
+    """Lazy proxy for GeminiService that initializes on first access."""
+    _instance: Optional[GeminiService] = None
+
+    def __getattr__(self, name):
+        if self._instance is None:
+            self._instance = GeminiService()
+        return getattr(self._instance, name)
+
+gemini_service = _GeminiServiceProxy()
