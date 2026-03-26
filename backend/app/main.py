@@ -150,19 +150,6 @@ async def health_check():
     return {"status": "healthy"}
 
 
-@app.get("/debug/config")
-async def debug_config():
-    """Debug endpoint to check configuration (remove in production)."""
-    return {
-        "cloudinary_cloud_name": "set" if settings.CLOUDINARY_CLOUD_NAME else "MISSING",
-        "cloudinary_api_key": "set" if settings.CLOUDINARY_API_KEY else "MISSING",
-        "cloudinary_api_secret": "set" if settings.CLOUDINARY_API_SECRET else "MISSING",
-        "gemini_api_key": "set" if settings.GOOGLE_GEMINI_API_KEY else "MISSING",
-        "stripe_secret_key": "set" if settings.STRIPE_SECRET_KEY else "MISSING",
-        "environment": settings.ENVIRONMENT,
-    }
-
-
 @app.get("/privacy", response_class=HTMLResponse)
 async def privacy_policy():
     """Privacy Policy page for App Store compliance."""
@@ -344,12 +331,35 @@ async def terms_of_service():
     </ul>
 
     <h2>4. Subscriptions and Payments</h2>
+    <p>PriceMatch AI offers the following auto-renewable subscription options:</p>
     <ul>
-        <li>Some features require a paid subscription</li>
-        <li>Subscriptions automatically renew unless cancelled</li>
-        <li>Payments are processed securely through Apple's App Store</li>
-        <li>Refunds are handled according to Apple's refund policy</li>
+        <li><strong>Basic:</strong> $4.99/month - 100 scans per month</li>
+        <li><strong>Pro:</strong> $9.99/month - 500 scans per month</li>
+        <li><strong>Unlimited:</strong> $19.99/month - Unlimited scans</li>
     </ul>
+
+    <h3>Payment and Renewal Terms</h3>
+    <ul>
+        <li>Payment will be charged to your Apple ID account at confirmation of purchase</li>
+        <li>Subscriptions automatically renew unless auto-renew is turned off at least 24 hours before the end of the current period</li>
+        <li>Your account will be charged for renewal within 24 hours prior to the end of the current period</li>
+        <li>You can manage and cancel your subscriptions by going to your App Store account settings after purchase</li>
+        <li>Any unused portion of a free trial period, if offered, will be forfeited when you purchase a subscription</li>
+    </ul>
+
+    <h3>Managing Your Subscription</h3>
+    <p>To cancel or manage your subscription:</p>
+    <ol>
+        <li>Open the Settings app on your device</li>
+        <li>Tap your name at the top</li>
+        <li>Tap "Subscriptions"</li>
+        <li>Select PriceMatch AI</li>
+        <li>Tap "Cancel Subscription" or modify your plan</li>
+    </ol>
+    <p>Or visit: <a href="https://apps.apple.com/account/subscriptions">https://apps.apple.com/account/subscriptions</a></p>
+
+    <h3>Refunds</h3>
+    <p>Refunds are handled according to Apple's refund policy. To request a refund, visit <a href="https://reportaproblem.apple.com">reportaproblem.apple.com</a>.</p>
 
     <h2>5. Acceptable Use</h2>
     <p>You agree not to:</p>

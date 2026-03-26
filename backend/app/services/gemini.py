@@ -694,6 +694,121 @@ Be specific and accurate. Use fashion industry standard terms."""
                 "formality": "casual"
             }
 
+    async def verify_dupe_similarity(
+        self,
+        original_image_url: str,
+        dupe_image_url: str
+    ) -> dict:
+        """
+        Compare two product images to verify they are similar (dupe verification).
+        Used before allowing users to share dupes in the community feed.
+
+        Args:
+            original_image_url: URL of the original (expensive) product image
+            dupe_image_url: URL of the dupe (cheaper alternative) image
+
+        Returns:
+            Dictionary with similarity_score (0-100), is_valid_dupe (bool), and analysis
+        """
+        prompt = """You are an AI product comparison expert.
+Compare these two product images and determine if the second item is a valid "dupe" (affordable alternative) of the first.
+
+ANALYZE:
+1. Are these the SAME TYPE of product? (e.g., both are sneakers, both are handbags)
+2. How similar are the design elements? (silhouette, shape, details)
+3. How similar are the colors/patterns?
+4. Do they serve the same fashion purpose?
+
+IMPORTANT RULES:
+- A valid dupe should be at least 60% visually similar
+- Items must be the same product category (can't compare a bag to a shoe)
+- Minor differences in branding/logos are acceptable
+- Different colors of similar design is acceptable (but note it)
+
+Respond ONLY with valid JSON in this exact format:
+{
+    "is_same_category": true/false,
+    "product_category": "what type of product this is",
+    "similarity_score": 0-100,
+    "is_valid_dupe": true/false,
+    "design_match": "how well designs match (excellent/good/moderate/poor)",
+    "color_match": "same/similar/different",
+    "key_similarities": ["similarity 1", "similarity 2"],
+    "key_differences": ["difference 1", "difference 2"],
+    "verdict": "Brief 1-2 sentence verdict explaining the comparison"
+}
+
+Be fair but strict - we want quality dupe recommendations in our community."""
+
+        try:
+            import httpx
+            import PIL.Image
+            import io
+
+            # Fetch both images
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                original_resp = await client.get(original_image_url)
+                dupe_resp = await client.get(dupe_image_url)
+
+            if original_resp.status_code != 200 or dupe_resp.status_code != 200:
+                return {
+                    "similarity_score": 0,
+                    "is_valid_dupe": False,
+                    "error": "Could not fetch one or both images",
+                    "verdict": "Unable to verify - image URLs are not accessible"
+                }
+
+            original_image = PIL.Image.open(io.BytesIO(original_resp.content))
+            dupe_image = PIL.Image.open(io.BytesIO(dupe_resp.content))
+
+            # Send both images to Gemini for comparison
+            response = self.model.generate_content([
+                "First image (Original/Expensive item):",
+                original_image,
+                "Second image (Dupe/Budget alternative):",
+                dupe_image,
+                prompt
+            ])
+
+            # Parse JSON from response
+            response_text = response.text.strip()
+
+            # Remove markdown code blocks if present
+            if response_text.startswith("```json"):
+                response_text = response_text[7:]
+            if response_text.startswith("```"):
+                response_text = response_text[3:]
+            if response_text.endswith("```"):
+                response_text = response_text[:-3]
+
+            response_text = response_text.strip()
+
+            result = json.loads(response_text)
+
+            # Ensure required fields exist
+            result.setdefault("similarity_score", 0)
+            result.setdefault("is_valid_dupe", False)
+            result.setdefault("verdict", "Analysis complete")
+
+            return result
+
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse dupe verification response: {e}")
+            return {
+                "similarity_score": 0,
+                "is_valid_dupe": False,
+                "error": "Failed to parse AI response",
+                "verdict": "Verification failed - please try again"
+            }
+        except Exception as e:
+            logger.error(f"Error verifying dupe images: {e}")
+            return {
+                "similarity_score": 0,
+                "is_valid_dupe": False,
+                "error": str(e),
+                "verdict": "Verification failed - please try again"
+            }
+
     async def suggest_outfits(
         self,
         wardrobe_items: list,

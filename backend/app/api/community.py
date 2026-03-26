@@ -10,6 +10,7 @@ from datetime import datetime
 from ..database import get_db
 from ..models import User, DupeShare, DupeLike
 from ..utils.auth import get_current_user
+from ..services.gemini import gemini_service
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +75,85 @@ class CommunityFeedResponse(BaseModel):
     dupes: List[DupeShareResponse]
     total: int
     hasMore: bool
+
+
+class VerifyDupeRequest(BaseModel):
+    """Request to verify if two products are valid dupes."""
+    original_image_url: str
+    dupe_image_url: str
+
+
+class VerifyDupeResponse(BaseModel):
+    """Response from dupe verification."""
+    similarity_score: int
+    is_valid_dupe: bool
+    product_category: Optional[str] = None
+    design_match: Optional[str] = None
+    color_match: Optional[str] = None
+    key_similarities: List[str] = []
+    key_differences: List[str] = []
+    verdict: str
+
+
+@router.post("/verify-dupe", response_model=VerifyDupeResponse)
+async def verify_dupe(
+    request: VerifyDupeRequest,
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Verify if two product images are similar enough to be a valid dupe.
+    Uses AI vision to compare the original and dupe images.
+
+    Returns similarity score (0-100) and whether it's a valid dupe.
+    """
+    if not request.original_image_url or not request.dupe_image_url:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Both image URLs are required"
+        )
+
+    # Validate URLs look like valid image URLs
+    valid_extensions = ('.jpg', '.jpeg', '.png', '.webp', '.gif')
+    original_lower = request.original_image_url.lower()
+    dupe_lower = request.dupe_image_url.lower()
+
+    # Check URL format (basic validation)
+    if not (request.original_image_url.startswith('http://') or
+            request.original_image_url.startswith('https://')):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Original image URL must be a valid HTTP/HTTPS URL"
+        )
+
+    if not (request.dupe_image_url.startswith('http://') or
+            request.dupe_image_url.startswith('https://')):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Dupe image URL must be a valid HTTP/HTTPS URL"
+        )
+
+    try:
+        result = await gemini_service.verify_dupe_similarity(
+            request.original_image_url,
+            request.dupe_image_url
+        )
+
+        return VerifyDupeResponse(
+            similarity_score=result.get("similarity_score", 0),
+            is_valid_dupe=result.get("is_valid_dupe", False),
+            product_category=result.get("product_category"),
+            design_match=result.get("design_match"),
+            color_match=result.get("color_match"),
+            key_similarities=result.get("key_similarities", []),
+            key_differences=result.get("key_differences", []),
+            verdict=result.get("verdict", "Verification failed")
+        )
+    except Exception as e:
+        logger.error(f"Error verifying dupe: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to verify dupe. Please try again."
+        )
 
 
 @router.post("/share", response_model=DupeShareResponse)
