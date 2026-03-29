@@ -22,13 +22,17 @@ class ProductSearchService:
     # Maximum query length for SerpAPI (keep it reasonable for Google Shopping)
     MAX_QUERY_LENGTH = 100
 
-    # Color normalization mappings for better matching
+ 
+ 
+  
+     # Color normalization mappings for better matching
     COLOR_ALIASES = {
         "white": ["white", "cream", "ivory", "off-white", "snow", "pearl", "eggshell"],
         "black": ["black", "ebony", "onyx", "charcoal", "jet"],
         "blue": ["blue", "navy", "cobalt", "azure", "indigo", "denim", "royal blue", "sky blue", "teal"],
         "red": ["red", "crimson", "scarlet", "burgundy", "maroon", "wine", "ruby", "cherry"],
         "green": ["green", "olive", "emerald", "sage", "forest", "mint", "hunter", "kelly"],
+ 
         "pink": ["pink", "blush", "rose", "coral", "salmon", "fuchsia", "magenta", "dusty rose"],
         "brown": ["brown", "tan", "camel", "beige", "khaki", "taupe", "chocolate", "cognac", "mocha"],
         "gray": ["gray", "grey", "silver", "charcoal", "slate", "ash", "heather"],
@@ -969,8 +973,9 @@ class ProductSearchService:
                     except ValueError:
                         price = 0.0
 
+                # If no price available, set to -1 to indicate "See price on site"
                 if price <= 0:
-                    price = 0.01
+                    price = -1
 
                 # Extract rating if available from visual match
                 rating = item.get("rating")
@@ -1016,8 +1021,9 @@ class ProductSearchService:
                     except ValueError:
                         price = 0.0
 
+                # If no price available, set to -1 to indicate "See price on site"
                 if price <= 0:
-                    price = 0.01
+                    price = -1
 
                 # Extract rating from Lens shopping results
                 lens_rating = item.get("rating")
@@ -1162,9 +1168,9 @@ class ProductSearchService:
                     except ValueError:
                         price = 0.0
 
-                # Don't skip items with 0 price - just set a default
+                # If no price available, set to -1 to indicate "See price on site"
                 if price <= 0:
-                    price = 0.01  # Set minimal price instead of skipping
+                    price = -1  # -1 indicates unknown price
 
                 # PRICE FILTER: Skip items above max_price (for finding cheap dupes)
                 if max_price and price > max_price:
