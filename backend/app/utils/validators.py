@@ -8,7 +8,7 @@ import html
 
 # Constants for validation
 EMAIL_REGEX = re.compile(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$')
-PASSWORD_MIN_LENGTH = 8
+PASSWORD_MIN_LENGTH = 6  # Simplified - just require minimum length
 PASSWORD_MAX_LENGTH = 128
 NAME_MAX_LENGTH = 100
 SEARCH_QUERY_MAX_LENGTH = 500
@@ -74,15 +74,8 @@ class SecureUserCreate(BaseModel):
     @field_validator('password')
     @classmethod
     def validate_password(cls, v: str) -> str:
-        # Check password complexity
-        if not any(c.isupper() for c in v):
-            raise ValueError('Password must contain at least one uppercase letter')
-        if not any(c.islower() for c in v):
-            raise ValueError('Password must contain at least one lowercase letter')
-        if not any(c.isdigit() for c in v):
-            raise ValueError('Password must contain at least one digit')
-        if not any(c in '!@#$%^&*()_+-=[]{}|;:,.<>?' for c in v):
-            raise ValueError('Password must contain at least one special character')
+        # Simple validation - just check minimum length
+        # Pydantic Field already enforces min_length=6, max_length=128
         return v
 
     @field_validator('full_name')
