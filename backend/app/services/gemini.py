@@ -420,59 +420,45 @@ The user should think: "This AI just saved me money and helped me make a smarter
             )
 
     def get_tier_features(self, tier: str) -> dict:
-        """Get features and limits for a subscription tier."""
+        """Get features and limits for a subscription tier.
+
+        All tiers get the same premium analysis quality - only the number of results differs.
+        This lets users experience the full quality and encourages upgrades for more results.
+        """
+        # Base premium features - same for all tiers
+        base_features = {
+            "analysis_depth": "ultimate",
+            "includes_styling_tips": True,
+            "includes_trend_analysis": True,
+            "includes_celebrity_style": True,
+            "includes_alternatives": True,
+            "includes_value_analysis": True,
+            "includes_buyer_strategy": True,
+            "includes_financial_analysis": True,
+            "priority_processing": True,
+        }
+
+        # Only max_results differs by tier
         features = {
             "free": {
-                "analysis_depth": "basic",
+                **base_features,
                 "max_results": 15,
-                "includes_styling_tips": False,
-                "includes_trend_analysis": False,
-                "includes_celebrity_style": False,
-                "includes_alternatives": False,
-                "includes_value_analysis": False,
-                "includes_buyer_strategy": False,
-                "includes_financial_analysis": False,
-                "priority_processing": False,
-                "description": "Smart Basic Finder - Good results, solid value, fast"
+                "description": "Full AI analysis with 15 results per scan"
             },
             "basic": {
-                "analysis_depth": "enhanced",
+                **base_features,
                 "max_results": 25,
-                "includes_styling_tips": False,
-                "includes_trend_analysis": False,
-                "includes_celebrity_style": False,
-                "includes_alternatives": True,
-                "includes_value_analysis": True,
-                "includes_buyer_strategy": False,
-                "includes_financial_analysis": False,
-                "priority_processing": False,
-                "description": "Value Intelligence - Better comparison logic + quality analysis"
+                "description": "Full AI analysis with 25 results per scan"
             },
             "pro": {
-                "analysis_depth": "premium",
+                **base_features,
                 "max_results": 40,
-                "includes_styling_tips": True,
-                "includes_trend_analysis": True,
-                "includes_celebrity_style": True,
-                "includes_alternatives": True,
-                "includes_value_analysis": True,
-                "includes_buyer_strategy": True,
-                "includes_financial_analysis": False,
-                "priority_processing": True,
-                "description": "Personalized Optimization AI - Strategic advice + use-case optimization"
+                "description": "Full AI analysis with 40 results per scan"
             },
             "unlimited": {
-                "analysis_depth": "ultimate",
+                **base_features,
                 "max_results": 60,
-                "includes_styling_tips": True,
-                "includes_trend_analysis": True,
-                "includes_celebrity_style": True,
-                "includes_alternatives": True,
-                "includes_value_analysis": True,
-                "includes_buyer_strategy": True,
-                "includes_financial_analysis": True,
-                "priority_processing": True,
-                "description": "Elite AI Shopping Agent - Predictive pricing, lifecycle value, wardrobe integration"
+                "description": "Full AI analysis with 60 results per scan"
             }
         }
         return features.get(tier, features["free"])
