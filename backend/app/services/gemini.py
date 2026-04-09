@@ -422,43 +422,61 @@ The user should think: "This AI just saved me money and helped me make a smarter
     def get_tier_features(self, tier: str) -> dict:
         """Get features and limits for a subscription tier.
 
-        All tiers get the same premium analysis quality - only the number of results differs.
-        This lets users experience the full quality and encourages upgrades for more results.
+        All tiers get the same search quality (analysis_depth: ultimate).
+        Premium features (styling tips, trend analysis, etc.) are still tier-gated.
         """
-        # Base premium features - same for all tiers
-        base_features = {
-            "analysis_depth": "ultimate",
-            "includes_styling_tips": True,
-            "includes_trend_analysis": True,
-            "includes_celebrity_style": True,
-            "includes_alternatives": True,
-            "includes_value_analysis": True,
-            "includes_buyer_strategy": True,
-            "includes_financial_analysis": True,
-            "priority_processing": True,
-        }
-
-        # Only max_results differs by tier
         features = {
             "free": {
-                **base_features,
+                "analysis_depth": "ultimate",  # Same quality search for all tiers
                 "max_results": 15,
-                "description": "Full AI analysis with 15 results per scan"
+                "includes_styling_tips": False,
+                "includes_trend_analysis": False,
+                "includes_celebrity_style": False,
+                "includes_alternatives": False,
+                "includes_value_analysis": False,
+                "includes_buyer_strategy": False,
+                "includes_financial_analysis": False,
+                "priority_processing": False,
+                "description": "15 high-quality results per scan"
             },
             "basic": {
-                **base_features,
+                "analysis_depth": "ultimate",  # Same quality search for all tiers
                 "max_results": 25,
-                "description": "Full AI analysis with 25 results per scan"
+                "includes_styling_tips": False,
+                "includes_trend_analysis": False,
+                "includes_celebrity_style": False,
+                "includes_alternatives": True,
+                "includes_value_analysis": True,
+                "includes_buyer_strategy": False,
+                "includes_financial_analysis": False,
+                "priority_processing": False,
+                "description": "25 high-quality results + value analysis"
             },
             "pro": {
-                **base_features,
+                "analysis_depth": "ultimate",  # Same quality search for all tiers
                 "max_results": 40,
-                "description": "Full AI analysis with 40 results per scan"
+                "includes_styling_tips": True,
+                "includes_trend_analysis": True,
+                "includes_celebrity_style": True,
+                "includes_alternatives": True,
+                "includes_value_analysis": True,
+                "includes_buyer_strategy": True,
+                "includes_financial_analysis": False,
+                "priority_processing": True,
+                "description": "40 high-quality results + all premium features"
             },
             "unlimited": {
-                **base_features,
+                "analysis_depth": "ultimate",  # Same quality search for all tiers
                 "max_results": 60,
-                "description": "Full AI analysis with 60 results per scan"
+                "includes_styling_tips": True,
+                "includes_trend_analysis": True,
+                "includes_celebrity_style": True,
+                "includes_alternatives": True,
+                "includes_value_analysis": True,
+                "includes_buyer_strategy": True,
+                "includes_financial_analysis": True,
+                "priority_processing": True,
+                "description": "60 high-quality results + all premium features"
             }
         }
         return features.get(tier, features["free"])
