@@ -370,6 +370,7 @@ The user should think: "This AI just saved me money and helped me make a smarter
             tier: Subscription tier ('free', 'basic', 'pro', 'unlimited')
             search_mode: Search mode ('exact' for same item, 'alternatives' for similar items)
         """
+        import asyncio
         prompt = self._get_tier_prompt(tier, search_mode)
 
         try:
@@ -382,7 +383,28 @@ The user should think: "This AI just saved me money and helped me make a smarter
             # Load image from disk
             image = PIL.Image.open(clean_path)
 
-            response = self.model.generate_content([prompt, image])
+            # Retry logic with exponential backoff for ResourceExhausted errors
+            max_retries = 3
+            response = None
+            for attempt in range(max_retries):
+                try:
+                    response = self.model.generate_content([prompt, image])
+                    break  # Success, exit retry loop
+                except Exception as e:
+                    error_name = type(e).__name__
+                    if "ResourceExhausted" in error_name or "429" in str(e):
+                        if attempt < max_retries - 1:
+                            wait_time = (2 ** attempt) * 2  # 2s, 4s, 8s
+                            logger.warning(f"Rate limited, waiting {wait_time}s before retry {attempt + 2}/{max_retries}")
+                            await asyncio.sleep(wait_time)
+                        else:
+                            logger.error(f"Rate limit exceeded after {max_retries} retries")
+                            raise
+                    else:
+                        raise
+
+            if response is None:
+                raise Exception("Failed to get response from Gemini")
 
             # Parse JSON from response
             response_text = response.text.strip()
