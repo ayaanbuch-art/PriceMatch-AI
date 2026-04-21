@@ -1,5 +1,7 @@
 [build]
 builder = "nixpacks"
+# Force fresh pip install to pick up new packages like redis
+buildCommand = "pip install --no-cache-dir -r requirements.txt"
 
 [deploy]
 startCommand = "gunicorn app.main:app --workers 4 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT"
