@@ -859,7 +859,7 @@ class RecommendationService:
             random.shuffle(trending_products)
             sections.append({
                 "title": "Trending Now",
-                "subtitle": f"🔥 Hot {trending_style} picks for Gen Z",
+                "subtitle": f"Popular {trending_style} styles right now",
                 "products": [p.dict() for p in trending_products[:tier_config["products_per_section"]]]
             })
 
@@ -887,9 +887,9 @@ class RecommendationService:
                     # Build descriptive subtitle
                     if wardrobe_types:
                         type_str = wardrobe_types[0]
-                        subtitle = f"👕 More {type_str}s you'll love"
+                        subtitle = f"More {type_str}s you'll love"
                     else:
-                        subtitle = "👕 Matching your wardrobe vibe"
+                        subtitle = "Matching your wardrobe style"
 
                     sections.append({
                         "title": "Similar to Your Closet",
@@ -910,9 +910,9 @@ class RecommendationService:
                     subtitle_parts.append(prefs['top_styles'][0])
 
                 if subtitle_parts:
-                    subtitle = f"✨ Curated for your {' & '.join(subtitle_parts)} aesthetic"
+                    subtitle = f"Curated for your {' & '.join(subtitle_parts)} style"
                 else:
-                    subtitle = "✨ Curated picks matching your unique vibe"
+                    subtitle = "Curated picks based on your preferences"
 
                 sections.append({
                     "title": "Based on Your Style",
@@ -953,7 +953,7 @@ class RecommendationService:
                 random.shuffle(fresh_products)
                 sections.append({
                     "title": "Fresh Drops",
-                    "subtitle": "✨ Just dropped this week",
+                    "subtitle": "Just dropped this week",
                     "products": [p.dict() for p in fresh_products[:tier_config["products_per_section"]]]
                 })
 

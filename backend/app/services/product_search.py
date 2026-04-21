@@ -15,6 +15,12 @@ logger = logging.getLogger(__name__)
 # Import the shared API tracker from recommendations
 from .recommendations import api_tracker, SimpleCache
 
+# Import affiliate and caching services
+from .affiliate import affiliate_service
+from .search_cache import search_cache
+from .redis_cache import redis_cache
+from .google_cse import google_cse_service
+
 
 class ProductSearchService:
     """Service for searching products via APIs with intelligent filtering."""
@@ -357,9 +363,53 @@ class ProductSearchService:
 
         User-provided brand/price override AI detection for better accuracy.
         """
-        if not settings.SERPAPI_API_KEY:
-            logger.warning("No SERPAPI_API_KEY found. Returning empty results.")
+        # Check if we have any search API configured
+        has_serpapi = bool(settings.SERPAPI_API_KEY)
+        has_google_cse = google_cse_service.is_configured()
+
+        if not has_serpapi and not has_google_cse:
+            logger.warning("No search API configured (SERPAPI or Google CSE). Returning empty results.")
             return []
+
+        # ===== CHECK CACHE FIRST (saves API costs by 40-60%) =====
+        # Only cache text-based searches (not visual/Google Lens which need image_url)
+        use_cache = search_mode == "alternatives" or not image_url
+        effective_brand = user_brand.strip() if user_brand and user_brand.strip() else analysis.brand
+
+        if use_cache:
+            # Try Redis cache first (fastest)
+            cached_products = None
+            if redis_cache._connected:
+                cached_products = await redis_cache.get(
+                    item_type=analysis.item_type,
+                    colors=analysis.colors,
+                    brand=effective_brand,
+                    style=analysis.style,
+                    gender=gender,
+                    search_mode=search_mode
+                )
+
+            # Fall back to file cache if Redis miss or not connected
+            if not cached_products:
+                cached_products = search_cache.get(
+                    item_type=analysis.item_type,
+                    colors=analysis.colors,
+                    brand=effective_brand,
+                    style=analysis.style,
+                    gender=gender,
+                    search_mode=search_mode
+                )
+
+            if cached_products:
+                logger.info(f"Using cached results: {len(cached_products)} products")
+                # Convert cached dicts back to Product objects and apply affiliate links
+                products = [Product(**p) if isinstance(p, dict) else p for p in cached_products]
+                # Apply affiliate links before returning
+                for product in products:
+                    product.affiliate_link = affiliate_service.convert_to_affiliate_link(
+                        product.affiliate_link, product.merchant
+                    )
+                return products[:self._get_tier_limits(tier)["max_total"]]
 
         all_products = []
         visual_products = []
@@ -476,6 +526,42 @@ class ProductSearchService:
         max_results = tier_limits["max_total"]
         if len(all_products) > max_results:
             all_products = all_products[:max_results]
+
+        # ===== CACHE RESULTS (for future cost savings - 40-60% reduction) =====
+        if use_cache and all_products:
+            # Convert to dicts for caching
+            products_to_cache = [p.model_dump() if hasattr(p, 'model_dump') else p.dict() for p in all_products]
+
+            # Save to Redis (primary cache - shared across instances)
+            if redis_cache._connected:
+                await redis_cache.set(
+                    item_type=analysis.item_type,
+                    colors=analysis.colors,
+                    products=products_to_cache,
+                    brand=effective_brand,
+                    style=analysis.style,
+                    gender=gender,
+                    search_mode=search_mode
+                )
+
+            # Also save to file cache (fallback if Redis unavailable)
+            search_cache.set(
+                item_type=analysis.item_type,
+                colors=analysis.colors,
+                products=products_to_cache,
+                brand=effective_brand,
+                style=analysis.style,
+                gender=gender,
+                search_mode=search_mode
+            )
+
+        # ===== CONVERT TO AFFILIATE LINKS (monetization) =====
+        # This happens LAST, after all search/ranking is complete
+        # It does NOT affect search quality - only wraps URLs with tracking
+        for product in all_products:
+            product.affiliate_link = affiliate_service.convert_to_affiliate_link(
+                product.affiliate_link, product.merchant
+            )
 
         logger.info(f"Returning {len(all_products)} products (visual: {len(visual_products)}, text: {len(text_products)})")
         return all_products

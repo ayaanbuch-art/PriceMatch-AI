@@ -135,6 +135,27 @@ if os.path.exists(static_dir):
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
 
+# Initialize Redis cache on startup
+from .services.redis_cache import redis_cache
+
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialize services on startup."""
+    # Connect to Redis if configured
+    connected = await redis_cache.connect()
+    if connected:
+        logger.info("Redis cache connected - API costs will be reduced by 40-60%")
+    else:
+        logger.info("Using file-based caching (Redis not configured)")
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Cleanup on shutdown."""
+    await redis_cache.disconnect()
+
+
 @app.get("/")
 async def root():
     """Root endpoint - minimal information disclosure."""

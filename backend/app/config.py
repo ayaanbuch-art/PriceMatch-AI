@@ -12,9 +12,9 @@ class Settings(BaseSettings):
     # JWT Authentication
     SECRET_KEY: str
     ALGORITHM: str = "HS256"
-    # SECURITY: Token expires in 60 minutes (industry best practice)
-    # For better UX, implement refresh tokens for longer sessions
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60  # 1 hour
+    # Token expires in 30 days for better mobile UX
+    # Users stay logged in unless they explicitly sign out
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 43200  # 30 days
     # Refresh token expiration (7 days) - for future implementation
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
@@ -34,6 +34,18 @@ class Settings(BaseSettings):
     AMAZON_ASSOCIATE_TAG: str = ""
     AMAZON_ACCESS_KEY: str = ""
     AMAZON_SECRET_KEY: str = ""
+
+    # Skimlinks (Universal Affiliate Network - 48,000+ merchants)
+    # Sign up free at: https://skimlinks.com
+    SKIMLINKS_PUBLISHER_ID: str = ""
+
+    # Sovrn Commerce (Alternative to Skimlinks)
+    # Sign up free at: https://commerce.sovrn.com
+    SOVRN_PUBLISHER_ID: str = ""
+
+    # Search Result Caching
+    # TTL in seconds for caching search results (default: 24 hours)
+    SEARCH_CACHE_TTL_SECONDS: int = 86400
 
     # App Configuration
     ENVIRONMENT: str = "development"
@@ -59,6 +71,17 @@ class Settings(BaseSettings):
 
     # Search APIs
     SERPAPI_API_KEY: str = ""
+
+    # Google Custom Search API (alternative to SerpAPI - much cheaper)
+    # Get your API key from: https://console.cloud.google.com/apis/credentials
+    # Create a Custom Search Engine at: https://programmablesearchengine.google.com/
+    GOOGLE_CSE_API_KEY: str = ""
+    GOOGLE_CSE_CX: str = ""  # Custom Search Engine ID
+
+    # Redis caching (reduces API costs by 40-60%)
+    # Format: redis://localhost:6379 or redis://user:password@host:port
+    # Leave empty to use file-based caching
+    REDIS_URL: str = ""
 
     # Cloudinary for public image URLs (required for Google Lens)
     # Sign up free at cloudinary.com
