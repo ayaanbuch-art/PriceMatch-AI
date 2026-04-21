@@ -14,18 +14,24 @@ import logging
 import hashlib
 import json
 import time
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, TYPE_CHECKING
 from ..config import settings
 
 logger = logging.getLogger(__name__)
 
 # Try to import redis, but don't fail if not available
+REDIS_AVAILABLE = False
+aioredis = None
+
 try:
-    import redis.asyncio as redis
+    import redis.asyncio as aioredis
     REDIS_AVAILABLE = True
-except ImportError:
-    REDIS_AVAILABLE = False
-    logger.warning("Redis package not installed. Using file-based caching.")
+    # Use warning level so it shows in production logs
+    logger.warning("REDIS: Package imported successfully - redis.asyncio is available")
+except ImportError as e:
+    logger.error(f"REDIS: Package import failed (ImportError): {e}")
+except Exception as e:
+    logger.error(f"REDIS: Package import failed ({type(e).__name__}): {e}")
 
 
 class RedisCache:
@@ -40,7 +46,7 @@ class RedisCache:
 
     def __init__(self):
         """Initialize the Redis cache."""
-        self._redis_client: Optional[redis.Redis] = None
+        self._redis_client = None  # Type: Optional[redis.asyncio.Redis]
         self._ttl = settings.SEARCH_CACHE_TTL_SECONDS
         self._stats = {
             "hits": 0,
@@ -53,16 +59,23 @@ class RedisCache:
 
     async def connect(self) -> bool:
         """Connect to Redis. Returns True if successful."""
+        # Use warning level so these show in production logs
+        logger.warning(f"REDIS: Connect called. REDIS_AVAILABLE={REDIS_AVAILABLE}, REDIS_URL={'configured' if settings.REDIS_URL else 'NOT SET'}")
+
         if not REDIS_AVAILABLE:
-            logger.info("Redis not available, using fallback cache")
+            logger.error("REDIS: Module not available (import failed), using fallback cache")
             return False
 
         if not settings.REDIS_URL:
-            logger.info("REDIS_URL not configured, using fallback cache")
+            logger.error("REDIS: REDIS_URL environment variable not configured")
             return False
 
         try:
-            self._redis_client = redis.from_url(
+            # Mask password in logs
+            url_preview = settings.REDIS_URL[:30] + "..." if len(settings.REDIS_URL) > 30 else settings.REDIS_URL
+            logger.warning(f"REDIS: Attempting connection to: {url_preview}")
+
+            self._redis_client = aioredis.from_url(
                 settings.REDIS_URL,
                 encoding="utf-8",
                 decode_responses=True
@@ -70,10 +83,10 @@ class RedisCache:
             # Test connection
             await self._redis_client.ping()
             self._connected = True
-            logger.info("Connected to Redis cache")
+            logger.warning("REDIS: Successfully connected! Caching enabled.")
             return True
         except Exception as e:
-            logger.warning(f"Failed to connect to Redis: {e}. Using fallback cache.")
+            logger.error(f"REDIS: Connection failed - {type(e).__name__}: {e}")
             self._connected = False
             return False
 
