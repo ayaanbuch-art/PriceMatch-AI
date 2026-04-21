@@ -46,8 +46,7 @@ stripe>=8.4.0
 slowapi>=0.1.9
 
 # Redis caching (reduces API costs by 40-60%)
-# Using redis with async support for FastAPI
-redis[hiredis]>=5.0.0
+redis>=5.0.0
 
 # Security scanning (dev dependency)
 # safety>=3.0.0
