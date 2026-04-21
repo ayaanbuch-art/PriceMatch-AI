@@ -18,7 +18,9 @@ class GeminiService:
         """Initialize Gemini service."""
         try:
             genai.configure(api_key=settings.GOOGLE_GEMINI_API_KEY)
-            model_name = 'gemini-2.0-flash'
+            # Use gemini-flash-latest for best compatibility with new projects
+            # This automatically uses the latest flash model (currently gemini-3-flash-preview)
+            model_name = 'gemini-flash-latest'
             self.model = genai.GenerativeModel(model_name)
         except Exception as e:
             logger.error(f"Failed to initialize Gemini model: {e}")
