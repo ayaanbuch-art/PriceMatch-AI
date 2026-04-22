@@ -206,31 +206,54 @@ async def search_by_image(
         user_tier = current_user.subscription_tier or "free"
         tier_features = gemini_service.get_tier_features(user_tier)
 
-        # Analyze image with Gemini Vision
-        analysis = await gemini_service.analyze_image(
-            local_image_path,
-            tier=user_tier,
-            search_mode=params.search_mode or "exact"
-        )
+        # For "exact" mode, skip Gemini entirely - just use Google Lens visual search
+        # This is 6x faster (5 sec vs 30 sec) and 90% cheaper
+        # Users can ask the chatbot for details if needed
+        search_mode = params.search_mode or "exact"
 
-        # Override AI analysis with user-provided values for better accuracy
-        if user_brand and user_brand.strip():
-            analysis.brand = user_brand.strip()
-            logger.info(f"Using user-provided brand: '{analysis.brand}'")
+        if search_mode == "exact":
+            # Skip Gemini - create minimal analysis for backwards compatibility
+            logger.info("EXACT MODE: Skipping Gemini, going straight to Google Lens")
+            analysis = GeminiAnalysis(
+                item_type="Visual Search",
+                brand=user_brand.strip() if user_brand else None,
+                style="",
+                detailed_description="Visual search - use chatbot for item details",
+                colors=[],
+                material="",
+                key_features=[],
+                estimated_brand_tier="unknown",
+                season_occasion="",
+                search_terms=["visual", "search"],
+                search_query="visual search",
+                price_estimate=user_price.strip() if user_price else ""
+            )
+        else:
+            # "alternatives" mode - need Gemini to describe item for text search
+            logger.info("ALTERNATIVES MODE: Using Gemini for item description")
+            analysis = await gemini_service.analyze_image(
+                local_image_path,
+                tier=user_tier,
+                search_mode=search_mode
+            )
 
-        if user_price and user_price.strip():
-            analysis.price_estimate = user_price.strip()
-            logger.info(f"Using user-provided price: '{analysis.price_estimate}'")
+            # Override AI analysis with user-provided values for better accuracy
+            if user_brand and user_brand.strip():
+                analysis.brand = user_brand.strip()
+                logger.info(f"Using user-provided brand: '{analysis.brand}'")
 
-        # Search for products using BOTH Google Lens (visual) AND Google Shopping (text)
-        # Pass Cloudinary image_url to enable visual matching via Google Lens API
-        # Pass user-provided brand/price for improved accuracy
-        # Pass user's size preferences for filtering
+            if user_price and user_price.strip():
+                analysis.price_estimate = user_price.strip()
+                logger.info(f"Using user-provided price: '{analysis.price_estimate}'")
+
+        # Search for products using Google Lens (visual) or Google Shopping (text)
+        # For exact mode: Uses Google Lens with image URL (fast, visual matching)
+        # For alternatives mode: Uses text search with Gemini analysis
         products = await product_search_service.search_products(
             analysis,
             gender=params.gender or "either",
             tier=user_tier,
-            search_mode=params.search_mode or "exact",
+            search_mode=search_mode,
             image_url=lens_image_url,  # Cloudinary URL for Google Lens visual search
             user_brand=user_brand,  # User-provided brand for better accuracy
             user_price=user_price,  # User-provided price estimate
@@ -270,7 +293,7 @@ async def search_by_image(
         # This saves ALL API costs on repeat searches
         await cache_search_result(
             image_hash,
-            params.search_mode or "exact",
+            search_mode,
             params.gender or "either",
             analysis.dict(),
             [p.dict() for p in products]
