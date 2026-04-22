@@ -1,22 +1,73 @@
 """Visual search API endpoints with secure input validation."""
 import logging
 import uuid
+import hashlib
+import json
 from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException
 from sqlalchemy.orm import Session
 from typing import Optional
 
 from ..database import get_db
 from ..models import User, SearchHistory, UserInteraction
-from ..schemas import SearchResult, SearchHistoryResponse
+from ..schemas import SearchResult, SearchHistoryResponse, GeminiAnalysis, Product
 from ..utils.auth import get_current_user
 from ..utils.image import save_image_locally, save_image_with_cloudinary
 from ..utils.validators import SecureSearchParams, SecureImageUpload
 from ..services.gemini import gemini_service
 from ..services.product_search import product_search_service
 from ..services.recommendations import recommendation_service
+from ..services.redis_cache import redis_cache
 from ..config import settings
 
 logger = logging.getLogger(__name__)
+
+
+def compute_image_hash(image_bytes: bytes) -> str:
+    """Compute a hash of image content for caching.
+
+    This allows us to cache results based on actual image content,
+    not the URL. Same image = same hash = cache hit.
+    """
+    return hashlib.sha256(image_bytes).hexdigest()[:32]
+
+
+async def get_cached_search(image_hash: str, search_mode: str, gender: str):
+    """Check Redis for cached search results by image hash."""
+    if not redis_cache._connected:
+        return None
+
+    cache_key = f"imgsearch:{image_hash}:{search_mode}:{gender}"
+    try:
+        cached = await redis_cache._redis_client.get(cache_key)
+        if cached:
+            data = json.loads(cached)
+            logger.warning(f"CACHE HIT! Returning cached results for image {image_hash[:8]}...")
+            return data
+    except Exception as e:
+        logger.warning(f"Cache get error: {e}")
+    return None
+
+
+async def cache_search_result(image_hash: str, search_mode: str, gender: str,
+                              analysis_dict: dict, products_list: list):
+    """Cache search results by image hash. TTL = 24 hours."""
+    if not redis_cache._connected:
+        return
+
+    cache_key = f"imgsearch:{image_hash}:{search_mode}:{gender}"
+    try:
+        data = {
+            "analysis": analysis_dict,
+            "products": products_list
+        }
+        await redis_cache._redis_client.setex(
+            cache_key,
+            86400,  # 24 hour TTL
+            json.dumps(data)
+        )
+        logger.info(f"Cached search results for image {image_hash[:8]}...")
+    except Exception as e:
+        logger.warning(f"Cache set error: {e}")
 
 router = APIRouter(prefix="/api/search", tags=["search"])
 
@@ -81,6 +132,61 @@ async def search_by_image(
                 status_code=400,
                 detail="Invalid file content. File must be a valid image"
             )
+
+        # Compute image hash for caching (based on actual image content)
+        image_hash = compute_image_hash(contents)
+        logger.info(f"Image hash: {image_hash[:8]}...")
+
+        # Check cache first - if we've seen this exact image before, return cached results
+        # This saves ALL API costs (Gemini + Google Lens + SerpAPI)
+        cached_result = await get_cached_search(
+            image_hash,
+            params.search_mode or "exact",
+            params.gender or "either"
+        )
+
+        if cached_result:
+            # Cache hit! Skip all API calls and return cached results
+            analysis = GeminiAnalysis(**cached_result["analysis"])
+            products = [Product(**p) for p in cached_result["products"]]
+
+            # Still save to search history (but mark as cached)
+            search_record = SearchHistory(
+                user_id=current_user.id,
+                image_url="[cached]",
+                search_query=" ".join(analysis.search_terms),
+                gemini_analysis=cached_result["analysis"],
+                results_data=cached_result["products"],
+                search_type=analysis.item_type
+            )
+            db.add(search_record)
+
+            # Track interaction
+            interaction = UserInteraction(
+                user_id=current_user.id,
+                product_id=f"search_cached_{image_hash[:8]}",
+                product_category=analysis.item_type,
+                interaction_type="search"
+            )
+            db.add(interaction)
+
+            # Still count towards scan limit
+            current_user.increment_scan_count()
+            db.commit()
+            db.refresh(search_record)
+
+            logger.warning(f"CACHE HIT - Saved API costs! Returning {len(products)} cached products")
+
+            return SearchResult(
+                id=search_record.id,
+                image_url="[cached]",
+                analysis=analysis,
+                products=products,
+                created_at=search_record.created_at
+            )
+
+        # Cache miss - proceed with normal flow (will cache results at the end)
+        logger.info("Cache miss - calling APIs...")
 
         # Process and save image (local + Cloudinary for Google Lens)
         local_image_path, cloudinary_url = await save_image_with_cloudinary(file)
@@ -159,6 +265,16 @@ async def search_by_image(
 
         # Invalidate recommendation cache so "For You" reflects this new search
         recommendation_service.invalidate_user_recommendations(current_user.id)
+
+        # Cache the results for future identical image uploads
+        # This saves ALL API costs on repeat searches
+        await cache_search_result(
+            image_hash,
+            params.search_mode or "exact",
+            params.gender or "either",
+            analysis.dict(),
+            [p.dict() for p in products]
+        )
 
         logger.info(f"Search completed: user_id={current_user.id}, search_id={search_record.id}")
 
