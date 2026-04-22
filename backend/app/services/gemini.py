@@ -22,12 +22,12 @@ class GeminiService:
             # This automatically uses the latest flash model (currently gemini-3-flash-preview)
             model_name = 'gemini-flash-latest'
 
-            # Generation config optimized for speed while ensuring complete responses
+            # Generation config - prioritize complete responses
             generation_config = genai.GenerationConfig(
                 temperature=0.3,  # Lower = faster, more deterministic
-                max_output_tokens=2048,  # Enough for full JSON response
                 top_p=0.8,
                 top_k=40,
+                # No max_output_tokens - JSON responses can exceed 2k tokens
             )
 
             self.model = genai.GenerativeModel(
