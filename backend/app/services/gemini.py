@@ -21,7 +21,19 @@ class GeminiService:
             # Use gemini-flash-latest for best compatibility with new projects
             # This automatically uses the latest flash model (currently gemini-3-flash-preview)
             model_name = 'gemini-flash-latest'
-            self.model = genai.GenerativeModel(model_name)
+
+            # Generation config optimized for speed
+            generation_config = genai.GenerationConfig(
+                temperature=0.3,  # Lower = faster, more deterministic
+                max_output_tokens=1024,  # Limit output length for speed
+                top_p=0.8,
+                top_k=40,
+            )
+
+            self.model = genai.GenerativeModel(
+                model_name,
+                generation_config=generation_config
+            )
         except Exception as e:
             logger.error(f"Failed to initialize Gemini model: {e}")
             raise HTTPException(
@@ -384,6 +396,19 @@ The user should think: "This AI just saved me money and helped me make a smarter
 
             # Load image from disk
             image = PIL.Image.open(clean_path)
+
+            # Resize image for faster processing (max 1024px on longest side)
+            # Smaller images = significantly faster Gemini analysis
+            max_size = 1024
+            if max(image.size) > max_size:
+                ratio = max_size / max(image.size)
+                new_size = (int(image.size[0] * ratio), int(image.size[1] * ratio))
+                image = image.resize(new_size, PIL.Image.Resampling.LANCZOS)
+                logger.info(f"Resized image from {image.size} to {new_size} for faster analysis")
+
+            # Convert to RGB if needed (removes alpha channel which can slow processing)
+            if image.mode in ('RGBA', 'P'):
+                image = image.convert('RGB')
 
             # Retry logic with exponential backoff for ResourceExhausted errors
             max_retries = 3
