@@ -44,3 +44,6 @@ stripe>=8.4.0
 
 # Rate limiting
 slowapi>=0.1.9
+
+# Redis caching (reduces API costs by 40-60%)
+redis>=5.0.0
